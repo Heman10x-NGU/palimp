@@ -94,7 +94,7 @@ AutoMem is a graph+vector memory stack that stores typed relationships (11 relat
 | Vector backend | Qdrant | Deterministic embeddings in SQLite |
 | Relationship types | 11 typed relationships | Relation enum (simpler) |
 | Scoring | 9-component hybrid | Multi-signal (lexical, vector, graph, recency, confidence) |
-| Bridge discovery | Yes | v0.3 (planned) |
+| Bridge discovery | Yes | Yes (multi-hop BFS, v0.3) |
 | Benchmark | 87% LongMemEval | Local mini-eval only |
 | Dependencies | FalkorDB + Qdrant + Docker | SQLite only |
 | Install complexity | Docker Compose | `pip install graphctx` |
@@ -205,6 +205,26 @@ GraphCtx adds the context graph layer on top of semantic search. If you only nee
 
 GraphCtx occupies a specific niche: it is a local, inspectable, SQLite-first context graph that provides HydraDB-style primitives (memories, knowledge, recall, context) for developers who want to self-host their agent's context layer.
 
+**When to use each tool:**
+
+- Use **Mem0** if you want managed memory/product maturity.
+- Use **Graphiti** if you need a full temporal graph framework with graph DB backends.
+- Use **AutoMem** if you want a more mature graph+vector memory stack with published benchmark discipline.
+- Use **Mnemon/Nocturne** if their CLI/MCP workflow matches your host-agent style.
+- Use **GraphCtx** if you want local SQLite, coding-agent runbooks, source-linked evidence, deterministic default embeddings, MCP-safe output, and no external graph/vector dependency.
+
+**v0.3 differentiators:**
+
+| Feature | GraphCtx v0.3 | Others |
+|---|---|---|
+| Multi-hop graph traversal | 2-3 hop BFS with depth decay over SQLite edges | Graphiti (graph DB), AutoMem (FalkorDB) |
+| Temporal validity filtering | `as_of`, `temporal_mode` (current/historical/all) on SQLite | Graphiti (graph DB), MemoryOS (Postgres) |
+| Entity alias deduplication | Normalized alias table, namespace-scoped merge | Not available in most local tools |
+| Runbook mode | `gotcha`/`workflow`/`command_fix` evidence packs under token budget | No equivalent |
+| Trigger keywords | Term-to-memory boost for weak-match surfacing | Nocturne (partial) |
+| Preprompt hook | `graphctx hook preprompt` returns safe JSON for agent integration | Mnemon (LLM-supervised) |
+| Configurable search weights | 7-component scoring via env vars | AutoMem (9-component, hardcoded) |
+
 It is not the right choice if you need:
 
 - A managed cloud platform (use HydraDB)
@@ -222,3 +242,6 @@ It is the right choice if you want:
 - Safe MCP output for agent consumption
 - SQLite simplicity with no external dependencies
 - Installable in one command (`pip install graphctx`)
+- Coding-agent runbooks with source-linked evidence packs
+- Temporal truth filtering and multi-hop graph recall
+- Entity alias deduplication and trigger keywords

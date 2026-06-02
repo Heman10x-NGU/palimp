@@ -58,6 +58,38 @@ GraphCtx draws inspiration from the following projects and ideas. **GraphCtx reu
 - **What was borrowed:** Standard framework and protocol usage. No application-level concepts borrowed.
 - **Code reuse:** none (used as dependencies)
 
+## v0.3 Design and Benchmark Sources
+
+The following external sources informed GraphCtx v0.3 design decisions, benchmark methodology, and feature prioritization. Concepts and framing were borrowed; no code was reused.
+
+### Mem0 Memory Evaluation
+- **Source:** https://docs.mem0.ai/core-concepts/memory-evaluation
+- **What was borrowed:** Memory evaluation methodology and benchmark framing for agent memory systems.
+
+### Mem0 Token-Efficient Memory Research
+- **Source:** https://mem0.ai/research
+- **What was borrowed:** Token-efficient memory design patterns and benchmark discipline.
+
+### Mem0 Temporal Reasoning
+- **Source:** https://mem0.ai/blog/introducing-temporal-reasoning-in-mem0
+- **What was borrowed:** Temporal reasoning benchmark discussion and the framing of temporal truth in agent memory.
+
+### Graphiti / Zep Temporal Context Graph
+- **Source:** https://www.getzep.com/platform/graphiti/
+- **What was borrowed:** Temporal context graph architecture, validity windows, and the episode-first design that directly influenced GraphCtx's temporal filtering and supersession tracking.
+
+### LongMemEval-V2
+- **Source:** https://arxiv.org/abs/2605.12493 and https://xiaowu0162.github.io/longmemeval-v2/
+- **What was borrowed:** The "experienced colleague" benchmark framing for long-term agent memory evaluation. This framing shaped GraphCtx's runbook mode and coding-agent context pack design.
+
+### MemX Local-First Memory
+- **Source:** https://arxiv.org/abs/2603.16171
+- **What was borrowed:** Local-first memory design patterns and the case for SQLite-based agent memory without external dependencies.
+
+### MemReranker
+- **Source:** https://arxiv.org/abs/2605.06132
+- **What was borrowed:** Reasoning-aware reranking context that informed GraphCtx's optional reranker hook design and thinking-mode query expansion.
+
 ## Licensing
 
 GraphCtx is released under the MIT License.
