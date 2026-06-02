@@ -42,13 +42,22 @@ def expand_query(query: str) -> list[str]:
             temporal_expansions.append(sq)
 
     # Extract entities for targeted queries (capitalized words > 2 chars)
+    _STOPWORDS = {
+        "what", "where", "when", "who", "why", "how", "which",
+        "whose", "whom", "are", "was", "were", "been", "does",
+        "did", "has", "have", "had", "can", "could", "should",
+        "would", "will", "shall", "may", "might", "must", "the",
+        "and", "but", "for", "nor", "yet", "you", "your", "they",
+        "them", "their", "she", "her", "him", "his", "our", "its",
+        "this", "that", "these", "those"
+    }
     entity_queries: list[str] = []
     words = query.split()
     for word in words:
         if word[0:1].isupper() and len(word) > 2:
             # Strip trailing punctuation
             clean = re.sub(r"[^\w]+$", "", word)
-            if clean and len(clean) > 2:
+            if clean and len(clean) > 2 and clean.lower() not in _STOPWORDS:
                 entity_queries.append(clean)
 
     all_queries = sub_queries + temporal_expansions + entity_queries

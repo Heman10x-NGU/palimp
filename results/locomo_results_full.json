@@ -3,35 +3,35 @@
   "system": "Palimp v0.3.0",
   "embedder": "deterministic-sha256",
   "top_k": 10,
-  "total_time_s": 484.0,
+  "total_time_s": 511.47,
   "overall_summary": {
     "fast": {
-      "avg_recall": 0.0721,
+      "avg_recall": 0.0713,
       "category_recall": {
         "adversarial": 0.0628,
         "multi-hop": 0.0632,
-        "open-domain": 0.0756,
+        "open-domain": 0.0746,
         "single-hop": 0.0605,
-        "temporal": 0.145
+        "temporal": 0.1371
       }
     },
     "hybrid": {
-      "avg_recall": 0.0727,
+      "avg_recall": 0.0723,
       "category_recall": {
         "adversarial": 0.0628,
         "multi-hop": 0.0632,
-        "open-domain": 0.0756,
-        "single-hop": 0.0604,
-        "temporal": 0.145
+        "open-domain": 0.0746,
+        "single-hop": 0.0643,
+        "temporal": 0.1371
       }
     },
     "thinking": {
-      "avg_recall": 0.0103,
+      "avg_recall": 0.011,
       "category_recall": {
         "adversarial": 0.0105,
         "multi-hop": 0.007,
-        "open-domain": 0.0046,
-        "single-hop": 0.0095,
+        "open-domain": 0.0039,
+        "single-hop": 0.0126,
         "temporal": 0.0745
       }
     }
@@ -41,19 +41,19 @@
       "sample_id": "conv-26",
       "num_turns": 419,
       "num_questions": 199,
-      "ingest_time_s": 0.134,
-      "eval_time_s": 30.792,
+      "ingest_time_s": 0.147,
+      "eval_time_s": 26.955,
       "results_by_mode": {
         "fast": {
           "mode": "fast",
           "top_k": 10,
-          "avg_recall": 0.0959,
+          "avg_recall": 0.0909,
           "num_questions": 199,
           "category_recall": {
             "multi-hop": 0.0807,
             "single-hop": 0.1081,
             "temporal": 0.2692,
-            "open-domain": 0.0714,
+            "open-domain": 0.0571,
             "adversarial": 0.0851
           },
           "per_question": [
@@ -1876,10 +1876,10 @@
               "evidence_ids": [
                 "D18:5"
               ],
-              "recall": 1.0,
+              "recall": 0.0,
               "num_retrieved": 10,
               "num_evidence": 1,
-              "hits": 1
+              "hits": 0
             },
             {
               "question": "What was Melanie's reaction to her children enjoying the Grand Canyon?",
@@ -2499,13 +2499,13 @@
         "hybrid": {
           "mode": "hybrid",
           "top_k": 10,
-          "avg_recall": 0.0959,
+          "avg_recall": 0.0909,
           "num_questions": 199,
           "category_recall": {
             "multi-hop": 0.0807,
             "single-hop": 0.1081,
             "temporal": 0.2692,
-            "open-domain": 0.0714,
+            "open-domain": 0.0571,
             "adversarial": 0.0851
           },
           "per_question": [
@@ -4328,10 +4328,10 @@
               "evidence_ids": [
                 "D18:5"
               ],
-              "recall": 1.0,
+              "recall": 0.0,
               "num_retrieved": 10,
               "num_evidence": 1,
-              "hits": 1
+              "hits": 0
             },
             {
               "question": "What was Melanie's reaction to her children enjoying the Grand Canyon?",
@@ -7406,8 +7406,8 @@
       "sample_id": "conv-30",
       "num_turns": 369,
       "num_questions": 105,
-      "ingest_time_s": 0.12,
-      "eval_time_s": 14.223,
+      "ingest_time_s": 0.116,
+      "eval_time_s": 12.621,
       "results_by_mode": {
         "fast": {
           "mode": "fast",
@@ -10012,11 +10012,11 @@
         "thinking": {
           "mode": "thinking",
           "top_k": 10,
-          "avg_recall": 0.0286,
+          "avg_recall": 0.0381,
           "num_questions": 105,
           "category_recall": {
             "multi-hop": 0.0,
-            "single-hop": 0.0,
+            "single-hop": 0.0385,
             "open-domain": 0.0227,
             "adversarial": 0.0833
           },
@@ -10494,10 +10494,10 @@
               "evidence_ids": [
                 "D19:4"
               ],
-              "recall": 0.0,
+              "recall": 1.0,
               "num_retrieved": 10,
               "num_evidence": 1,
-              "hits": 0
+              "hits": 1
             },
             {
               "question": "When did Gina go to a dance class with a group of friends?",
@@ -11315,8 +11315,8 @@
       "sample_id": "conv-41",
       "num_turns": 663,
       "num_questions": 193,
-      "ingest_time_s": 0.209,
-      "eval_time_s": 52.228,
+      "ingest_time_s": 0.21,
+      "eval_time_s": 65.604,
       "results_by_mode": {
         "fast": {
           "mode": "fast",
@@ -18491,8 +18491,8 @@
       "sample_id": "conv-42",
       "num_turns": 629,
       "num_questions": 260,
-      "ingest_time_s": 0.198,
-      "eval_time_s": 67.937,
+      "ingest_time_s": 0.209,
+      "eval_time_s": 93.33,
       "results_by_mode": {
         "fast": {
           "mode": "fast",
@@ -24997,13 +24997,13 @@
         "thinking": {
           "mode": "thinking",
           "top_k": 10,
-          "avg_recall": 0.0038,
+          "avg_recall": 0.0058,
           "num_questions": 260,
           "category_recall": {
             "multi-hop": 0.0,
             "single-hop": 0.025,
             "temporal": 0.0,
-            "open-domain": 0.0,
+            "open-domain": 0.0045,
             "adversarial": 0.0
           },
           "per_question": [
@@ -26266,10 +26266,10 @@
                 "D27:22",
                 "D27:23"
               ],
-              "recall": 0.0,
+              "recall": 0.5,
               "num_retrieved": 10,
               "num_evidence": 2,
-              "hits": 0
+              "hits": 1
             },
             {
               "question": "What type of movies does Nate enjoy watching the most?",
@@ -28250,19 +28250,19 @@
       "sample_id": "conv-43",
       "num_turns": 680,
       "num_questions": 242,
-      "ingest_time_s": 0.222,
-      "eval_time_s": 68.055,
+      "ingest_time_s": 0.273,
+      "eval_time_s": 67.143,
       "results_by_mode": {
         "fast": {
           "mode": "fast",
           "top_k": 10,
-          "avg_recall": 0.0848,
+          "avg_recall": 0.0766,
           "num_questions": 242,
           "category_recall": {
             "multi-hop": 0.0548,
             "single-hop": 0.0962,
-            "temporal": 0.0952,
-            "open-domain": 0.0935,
+            "temporal": 0.0238,
+            "open-domain": 0.0841,
             "adversarial": 0.0781
           },
           "per_question": [
@@ -28957,10 +28957,10 @@
               "evidence_ids": [
                 "D20:2"
               ],
-              "recall": 1.0,
+              "recall": 0.0,
               "num_retrieved": 10,
               "num_evidence": 1,
-              "hits": 1
+              "hits": 0
             },
             {
               "question": "What does John do to supplement his basketball training?",
@@ -29315,10 +29315,10 @@
               "evidence_ids": [
                 "D3:13"
               ],
-              "recall": 1.0,
+              "recall": 0.0,
               "num_retrieved": 10,
               "num_evidence": 1,
-              "hits": 1
+              "hits": 0
             },
             {
               "question": "Which city is John excited to have a game at?",
@@ -31276,13 +31276,13 @@
         "hybrid": {
           "mode": "hybrid",
           "top_k": 10,
-          "avg_recall": 0.0807,
+          "avg_recall": 0.0766,
           "num_questions": 242,
           "category_recall": {
             "multi-hop": 0.0548,
-            "single-hop": 0.0577,
-            "temporal": 0.0952,
-            "open-domain": 0.0935,
+            "single-hop": 0.0962,
+            "temporal": 0.0238,
+            "open-domain": 0.0841,
             "adversarial": 0.0781
           },
           "per_question": [
@@ -31747,10 +31747,10 @@
               "evidence_ids": [
                 "D11:7"
               ],
-              "recall": 0.0,
+              "recall": 1.0,
               "num_retrieved": 10,
               "num_evidence": 1,
-              "hits": 0
+              "hits": 1
             },
             {
               "question": "What could John do after his basketball career?",
@@ -31977,10 +31977,10 @@
               "evidence_ids": [
                 "D20:2"
               ],
-              "recall": 1.0,
+              "recall": 0.0,
               "num_retrieved": 10,
               "num_evidence": 1,
-              "hits": 1
+              "hits": 0
             },
             {
               "question": "What does John do to supplement his basketball training?",
@@ -32335,10 +32335,10 @@
               "evidence_ids": [
                 "D3:13"
               ],
-              "recall": 1.0,
+              "recall": 0.0,
               "num_retrieved": 10,
               "num_evidence": 1,
-              "hits": 1
+              "hits": 0
             },
             {
               "question": "Which city is John excited to have a game at?",
@@ -34296,11 +34296,11 @@
         "thinking": {
           "mode": "thinking",
           "top_k": 10,
-          "avg_recall": 0.0041,
+          "avg_recall": 0.0,
           "num_questions": 242,
           "category_recall": {
             "multi-hop": 0.0,
-            "single-hop": 0.0385,
+            "single-hop": 0.0,
             "temporal": 0.0,
             "open-domain": 0.0,
             "adversarial": 0.0
@@ -34743,10 +34743,10 @@
               "evidence_ids": [
                 "D10:9"
               ],
-              "recall": 1.0,
+              "recall": 0.0,
               "num_retrieved": 10,
               "num_evidence": 1,
-              "hits": 1
+              "hits": 0
             },
             {
               "question": "Which US states might Tim be in during September 2023 based on his plans of visiting Universal Studios?",
@@ -37319,8 +37319,8 @@
       "sample_id": "conv-44",
       "num_turns": 675,
       "num_questions": 158,
-      "ingest_time_s": 0.211,
-      "eval_time_s": 43.015,
+      "ingest_time_s": 0.216,
+      "eval_time_s": 41.083,
       "results_by_mode": {
         "fast": {
           "mode": "fast",
@@ -43301,8 +43301,8 @@
       "sample_id": "conv-47",
       "num_turns": 689,
       "num_questions": 190,
-      "ingest_time_s": 0.217,
-      "eval_time_s": 54.571,
+      "ingest_time_s": 0.23,
+      "eval_time_s": 55.232,
       "results_by_mode": {
         "fast": {
           "mode": "fast",
@@ -50363,8 +50363,8 @@
       "sample_id": "conv-48",
       "num_turns": 681,
       "num_questions": 239,
-      "ingest_time_s": 0.212,
-      "eval_time_s": 66.734,
+      "ingest_time_s": 0.224,
+      "eval_time_s": 67.773,
       "results_by_mode": {
         "fast": {
           "mode": "fast",
@@ -59336,19 +59336,19 @@
       "sample_id": "conv-49",
       "num_turns": 509,
       "num_questions": 196,
-      "ingest_time_s": 0.16,
-      "eval_time_s": 38.433,
+      "ingest_time_s": 0.226,
+      "eval_time_s": 37.474,
       "results_by_mode": {
         "fast": {
           "mode": "fast",
           "top_k": 10,
-          "avg_recall": 0.0849,
+          "avg_recall": 0.09,
           "num_questions": 196,
           "category_recall": {
             "multi-hop": 0.0893,
             "single-hop": 0.0808,
             "temporal": 0.2443,
-            "open-domain": 0.0616,
+            "open-domain": 0.0753,
             "adversarial": 0.075
           },
           "per_question": [
@@ -60574,10 +60574,10 @@
               "evidence_ids": [
                 "D2:1"
               ],
-              "recall": 0.0,
+              "recall": 1.0,
               "num_retrieved": 10,
               "num_evidence": 1,
-              "hits": 0
+              "hits": 1
             },
             {
               "question": "What did Evan find relaxing about his road trip to Jasper?",
@@ -61881,13 +61881,13 @@
         "hybrid": {
           "mode": "hybrid",
           "top_k": 10,
-          "avg_recall": 0.0849,
+          "avg_recall": 0.09,
           "num_questions": 196,
           "category_recall": {
             "multi-hop": 0.0893,
             "single-hop": 0.0808,
             "temporal": 0.2443,
-            "open-domain": 0.0616,
+            "open-domain": 0.0753,
             "adversarial": 0.075
           },
           "per_question": [
@@ -63113,10 +63113,10 @@
               "evidence_ids": [
                 "D2:1"
               ],
-              "recall": 0.0,
+              "recall": 1.0,
               "num_retrieved": 10,
               "num_evidence": 1,
-              "hits": 0
+              "hits": 1
             },
             {
               "question": "What did Evan find relaxing about his road trip to Jasper?",
@@ -66962,8 +66962,8 @@
       "sample_id": "conv-50",
       "num_turns": 568,
       "num_questions": 204,
-      "ingest_time_s": 0.181,
-      "eval_time_s": 46.111,
+      "ingest_time_s": 0.184,
+      "eval_time_s": 42.186,
       "results_by_mode": {
         "fast": {
           "mode": "fast",
@@ -72024,9 +72024,9 @@
           "num_questions": 204,
           "category_recall": {
             "multi-hop": 0.0234,
-            "single-hop": 0.0312,
+            "single-hop": 0.0625,
             "temporal": 0.2857,
-            "open-domain": 0.0115,
+            "open-domain": 0.0,
             "adversarial": 0.0
           },
           "per_question": [
@@ -72833,10 +72833,10 @@
                 "D14:1",
                 "D17:1"
               ],
-              "recall": 0.0,
+              "recall": 1.0,
               "num_retrieved": 10,
               "num_evidence": 2,
-              "hits": 0
+              "hits": 2
             },
             {
               "question": "What style of guitars does Calvin own?",
@@ -73563,10 +73563,10 @@
               "evidence_ids": [
                 "D23:9"
               ],
-              "recall": 1.0,
+              "recall": 0.0,
               "num_retrieved": 10,
               "num_evidence": 1,
-              "hits": 1
+              "hits": 0
             },
             {
               "question": "How does Calvin stay motivated when faced with setbacks?",
