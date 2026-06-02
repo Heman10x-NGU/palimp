@@ -38,7 +38,7 @@ class TestVersionConsistency:
     def test_package_version(self):
         import graphctx
 
-        assert graphctx.__version__ == "0.2.0"
+        assert graphctx.__version__ == "0.3.0"
 
     def test_pyproject_toml_version(self):
         pyproject = os.path.join(_PROJECT_ROOT, "pyproject.toml")
@@ -46,7 +46,7 @@ class TestVersionConsistency:
         text = open(pyproject).read()
         m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
         assert m is not None, "Could not find version in pyproject.toml"
-        assert m.group(1) == "0.2.0"
+        assert m.group(1) == "0.3.0"
 
     def test_health_response_version(self, tmp_path):
         """Health endpoint returns the same version as the package."""
@@ -60,7 +60,7 @@ class TestVersionConsistency:
             with TestClient(server_app) as client:
                 resp = client.get("/v1/health")
                 assert resp.status_code == 200
-                assert resp.json()["version"] == "0.2.0"
+                assert resp.json()["version"] == "0.3.0"
         finally:
             if old is None:
                 os.environ.pop("GRAPHCTX_DB", None)
@@ -78,7 +78,7 @@ class TestVersionConsistency:
         m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
         py_ver = m.group(1) if m else None
 
-        assert pkg_ver == py_ver == "0.2.0"
+        assert pkg_ver == py_ver == "0.3.0"
 
 
 # ---------------------------------------------------------------------------

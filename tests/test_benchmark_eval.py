@@ -99,7 +99,7 @@ def test_eval_mini_runs(tmp_path):
 
 
 def test_eval_mini_all_categories(tmp_path):
-    """All 9 categories are present in results."""
+    """All 15 categories are present in results."""
     db_path = str(tmp_path / "eval.db")
     result = runner.invoke(
         app,
@@ -122,7 +122,13 @@ def test_eval_mini_all_categories(tmp_path):
         "namespace_isolation",
         "prompt_injection_safety",
         "deletion_exclusion",
-        "multi_hop_bridge",
+        "multi_hop_2hop",
+        "multi_hop_3hop",
+        "alias_dedup",
+        "category_priority_under_budget",
+        "trigger_keyword_recall",
+        "runbook_gotcha_pack",
+        "no_answer_abstention",
     }
     actual_categories = {cat["category"] for cat in data["categories"]}
     assert actual_categories == expected_categories, (
