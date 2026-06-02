@@ -14,6 +14,7 @@ import struct
 import time
 from typing import Any
 
+from graphctx.config import get_config
 from graphctx.embeddings import DeterministicEmbedder
 from graphctx.extractor import RuleBasedExtractor
 from graphctx.ingest import ingest_memory, ingest_knowledge
@@ -408,8 +409,17 @@ def run_benchmark(
         "SELECT COUNT(*) as cnt FROM embedding WHERE namespace = ?", (ns,)
     ).fetchone()["cnt"]
 
+    # Category distribution
+    category_counts: dict[str, int] = {}
+    for fixture in all_fixtures:
+        cat = fixture.get("category", "other")
+        category_counts[cat] = category_counts.get(cat, 0) + 1
+
     # Tombstoned exclusion
     tombstoned = _check_tombstoned_exclusion(store, embedder, engine, ns)
+
+    # v3 config info
+    config = get_config()
 
     # Cleanup
     del store
@@ -436,4 +446,11 @@ def run_benchmark(
             "embedding_count": embedding_count,
         },
         "tombstoned_exclusion": tombstoned,
+        "v3_config": {
+            "graph_max_hops": config.max_hops,
+            "temporal_filter_enabled": True,
+            "alias_dedup_enabled": True,
+            "reranker_enabled": config.reranker_endpoint is not None,
+            "category_distribution": category_counts,
+        },
     }
