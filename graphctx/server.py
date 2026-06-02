@@ -25,6 +25,8 @@ from graphctx.errors import (
 from graphctx.extractor import BaseExtractor, HttpExtractor, RuleBasedExtractor
 from graphctx.models import (
     BatchResponse,
+    ContextPackRequest,
+    ContextPackResult,
     ContextResponse,
     DeleteResponse,
     HealthResponse,
@@ -55,7 +57,7 @@ from graphctx.validate import (
 # Constants
 # ---------------------------------------------------------------------------
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 MAX_REQUEST_BYTES = 1_048_576  # 1 MB
 
 
@@ -353,6 +355,8 @@ def recall(body: RecallRequest) -> dict[str, Any]:
         limit=body.limit,
         include_provenance=body.include_provenance,
         explain=body.explain,
+        as_of=body.as_of,
+        temporal_mode=body.temporal_mode,
     )
 
     # Collect top-level warnings from all results
@@ -370,6 +374,28 @@ def recall(body: RecallRequest) -> dict[str, Any]:
         response["explanation"] = output.explanation.model_dump()
 
     return response
+
+
+@app.post("/v1/context/pack")
+def context_pack(body: ContextPackRequest) -> ContextPackResult:
+    """Build a compact context pack for a coding task.
+
+    Returns runbook items + relevant memories/knowledge within token budget.
+    """
+    from graphctx.cli import _build_context_pack
+
+    ns = validate_namespace(body.namespace)
+    store: SQLiteStore = app.state.store
+
+    pack = _build_context_pack(
+        store=store, ns=ns, task=body.task, budget_tokens=body.budget_tokens,
+    )
+
+    return ContextPackResult(
+        items=pack["items"],
+        total_tokens=pack["total_tokens"],
+        safety=pack["safety"],
+    )
 
 
 @app.get("/v1/context/{entity_id}")

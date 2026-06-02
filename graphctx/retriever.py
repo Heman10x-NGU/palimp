@@ -3,7 +3,7 @@
 Implements hybrid recall across memories and knowledge with:
 - FTS5 lexical search
 - Deterministic/HTTP vector embeddings + cosine similarity
-- 1-hop graph boost
+- Multi-hop BFS graph traversal with depth decay
 - Ebbinghaus forgetting curve decay (with pin support)
 - Confidence scoring (avg entity/claim confidence from provenance)
 - Three modes: fast, hybrid, thinking
@@ -21,14 +21,25 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
+from graphctx.config import GraphConfig, get_config
 from graphctx.decay import DEFAULT_STABILITY, compute_decay_score
 from graphctx.embeddings import BaseEmbedder
-from graphctx.models import RecallExplanation, RecallResult, ScoreBreakdown
+from graphctx.models import CATEGORY_PRIORITY, RecallExplanation, RecallResult, ScoreBreakdown
+from graphctx.query_expansion import expand_query, merge_expansion_results
+from graphctx.reranker import rerank_results
 from graphctx.storage import SQLiteStore
+from graphctx.graph_traversal import bfs_graph_traversal, get_episodes_for_entities
+from graphctx.temporal import (
+    classify_temporal_status,
+    detect_temporal_cues,
+    should_include_in_mode,
+    temporal_score_boost,
+)
 
-# Scoring weights (from plan section 7)
-WEIGHT_LEXICAL = 0.40
-WEIGHT_VECTOR = 0.35
+# Scoring weights are now loaded from graphctx.config (env-based).
+# Kept as module-level fallbacks for backward compatibility.
+WEIGHT_LEXICAL = 0.35
+WEIGHT_VECTOR = 0.30
 WEIGHT_GRAPH = 0.15
 WEIGHT_RECENCY = 0.05
 WEIGHT_CONFIDENCE = 0.05
@@ -38,6 +49,12 @@ _DETERMINISTIC_MODEL = "deterministic-sha256"
 
 # Minimum word length for query term extraction (filters stop words)
 _MIN_QUERY_TERM_LENGTH = 2
+
+
+def conn_execute_safe(store: SQLiteStore, sql: str, params: tuple) -> Any:
+    """Execute a query safely and return the first row or None."""
+    conn = store._conn()
+    return conn.execute(sql, params).fetchone()
 
 
 def _extract_query_terms(query: str) -> list[str]:
@@ -80,9 +97,15 @@ class RecallEngine:
         The embedding provider (deterministic or HTTP).
     """
 
-    def __init__(self, store: SQLiteStore, embedder: BaseEmbedder) -> None:
+    def __init__(
+        self,
+        store: SQLiteStore,
+        embedder: BaseEmbedder,
+        config: Optional[GraphConfig] = None,
+    ) -> None:
         self._store = store
         self._embedder = embedder
+        self._config = config or get_config()
 
     # ------------------------------------------------------------------
     # Public API
@@ -97,6 +120,8 @@ class RecallEngine:
         include_provenance: bool = True,
         explain: bool = False,
         agent_tier: Optional[str] = None,
+        as_of: Optional[str] = None,
+        temporal_mode: str = "auto",
     ) -> RecallOutput:
         """Recall memories and knowledge for *ns* matching *query*.
 
@@ -115,6 +140,12 @@ class RecallEngine:
         explain : bool
             If True, populate score_breakdown and why_retrieved on each result
             and build a full RecallExplanation.
+        agent_tier : str, optional
+            Agent tier for context management.
+        as_of : str, optional
+            ISO timestamp for temporal reference time.
+        temporal_mode : str
+            Temporal filtering mode: auto, current, historical, all.
 
         Returns
         -------
@@ -131,37 +162,42 @@ class RecallEngine:
         # Extract query terms for explanation tracking
         query_terms = _extract_query_terms(query)
 
+        # Temporal cue detection: if auto, infer from query
+        effective_temporal_mode = temporal_mode
+        if temporal_mode == "auto":
+            cue = detect_temporal_cues(query)
+            if cue:
+                effective_temporal_mode = cue
+
         # 1. FTS5 lexical results
         fts_start = time.monotonic()
-        fts_rows = self._store.search_fts(ns, query, limit=limit * 3)
-        lexical_scores: dict[str, float] = {}
-        for row in fts_rows:
-            ep_id = row["episode_id"]
-            # FTS5 rank is negative; lower (more negative) = better match.
-            # Convert to a 0-1 score: use 1 / (1 + |rank|).
-            raw_rank = abs(float(row.get("rank", 0.0)))
-            lexical_scores[ep_id] = 1.0 / (1.0 + raw_rank)
+        lexical_scores = self._search_lexical(ns, query, limit)
         fts_ms = (time.monotonic() - fts_start) * 1000
 
         # 2. Vector similarity results (skip if no embeddings stored)
-        embedding_ms = 0.0
+        embed_start = time.monotonic()
+        vector_scores = self._search_vector(ns, query)
+        embedding_ms = (time.monotonic() - embed_start) * 1000
         vector_ms = 0.0
-        vector_scores: dict[str, float] = {}
-        episode_embeddings = self._store.get_all_embeddings(
-            ns, owner_type="episode", model=_DETERMINISTIC_MODEL
-        )
-        if episode_embeddings:
-            embed_start = time.monotonic()
-            query_vec = self._embedder.embed(query)
-            embedding_ms = (time.monotonic() - embed_start) * 1000
 
-            vector_start = time.monotonic()
-            for emb_row in episode_embeddings:
-                ep_id = emb_row["owner_id"]
-                vec = _blob_to_vector(emb_row["vector_blob"])
-                sim = self._cosine_similarity(query_vec, vec)
-                vector_scores[ep_id] = sim
-            vector_ms = (time.monotonic() - vector_start) * 1000
+        # Track query expansions for explanation
+        query_expansions: list[str] = []
+
+        # Thinking mode: expand query into sub-queries, search each, merge
+        if mode == "thinking":
+            sub_queries = expand_query(query)
+            if len(sub_queries) > 1:
+                query_expansions = sub_queries
+                for sq in sub_queries:
+                    sq_lex = self._search_lexical(ns, sq, limit)
+                    sq_vec = self._search_vector(ns, sq)
+                    # Merge: keep best score per episode
+                    for eid, score in sq_lex.items():
+                        if score > lexical_scores.get(eid, 0.0):
+                            lexical_scores[eid] = score
+                    for eid, score in sq_vec.items():
+                        if score > vector_scores.get(eid, 0.0):
+                            vector_scores[eid] = score
 
         # Merge candidate episode IDs
         all_episode_ids: set[str] = set()
@@ -187,11 +223,77 @@ class RecallEngine:
         norm_lexical = self._normalize_scores(live_lexical)
         norm_vector = self._normalize_scores(live_vector)
 
-        # 3. Graph boost (1-hop neighbor bonus)
+        # 3. Multi-hop graph traversal (BFS from seed entities)
         graph_start = time.monotonic()
-        graph_boosts: dict[str, float] = {}
+        graph_path_scores: dict[str, float] = {}
+        graph_paths_data: dict[str, list[dict[str, Any]]] = {}
+        max_hop_count = 0
+        best_path_score = 0.0
+
         if mode in ("hybrid", "thinking"):
-            graph_boosts = self._compute_graph_boosts(ns, live_episodes)
+            # Identify seed entities from top candidate episodes
+            seed_entity_ids: list[str] = []
+            initial_combined: dict[str, float] = {}
+            for eid in live_episodes:
+                initial_combined[eid] = norm_lexical.get(eid, 0.0) + norm_vector.get(eid, 0.0)
+            top_eps = sorted(initial_combined, key=lambda k: initial_combined[k], reverse=True)[:10]
+
+            for eid in top_eps:
+                ents = self._store.get_entities_for_episode(eid)
+                for ent in ents:
+                    if ent.get("deleted_at") is None:
+                        seed_entity_ids.append(ent["id"])
+
+            if seed_entity_ids:
+                bfs_result = bfs_graph_traversal(
+                    store=self._store,
+                    ns=ns,
+                    seed_entity_ids=seed_entity_ids,
+                    max_hops=self._config.max_hops,
+                    depth_decay=self._config.depth_decay,
+                    max_expansions=self._config.max_expansions,
+                )
+
+                # Map BFS entities to episodes via provenance
+                bfs_entity_ids = list(bfs_result.keys())
+                entity_episodes = get_episodes_for_entities(self._store, bfs_entity_ids)
+
+                # Compute graph_path_scores and track paths per episode
+                for entity_id, bfs_info in bfs_result.items():
+                    ep_ids = entity_episodes.get(entity_id, [])
+                    for ep_id in ep_ids:
+                        score = bfs_info["score"]
+                        hop = bfs_info["hop"]
+
+                        # Keep best score per episode
+                        if ep_id not in graph_path_scores or score > graph_path_scores[ep_id]:
+                            graph_path_scores[ep_id] = score
+
+                        # Track all paths for explanation
+                        if ep_id not in graph_paths_data:
+                            graph_paths_data[ep_id] = []
+                        graph_paths_data[ep_id].append({
+                            "entity_id": entity_id,
+                            "hop": hop,
+                            "score": round(score, 4),
+                            "edge_relation": bfs_info.get("edge_relation", ""),
+                        })
+
+                        if hop > max_hop_count:
+                            max_hop_count = hop
+                        if score > best_path_score:
+                            best_path_score = score
+
+                # Add BFS-discovered episodes not in initial candidates
+                new_ep_ids = set(graph_path_scores.keys()) - set(live_episodes.keys())
+                if new_ep_ids:
+                    new_eps = self._store.get_episodes_by_ids(list(new_ep_ids))
+                    for ep in new_eps:
+                        if ep.get("deleted_at") is None and ep.get("tombstoned_at") is None:
+                            live_episodes[ep["id"]] = ep
+                            norm_lexical[ep["id"]] = 0.0
+                            norm_vector[ep["id"]] = 0.0
+
         graph_ms = (time.monotonic() - graph_start) * 1000
 
         # 4. Decay score (Ebbinghaus forgetting curve)
@@ -204,14 +306,44 @@ class RecallEngine:
         if mode in ("hybrid", "thinking"):
             confidence_scores = self._compute_confidence_scores(ns, live_episodes)
 
-        # 6. Combine scores per mode
+        # 6. Category scores and trigger boosts
+        category_scores: dict[str, float] = {}
+        episode_categories: dict[str, str] = {}
+        trigger_boosts: dict[str, float] = {}
+        if mode in ("hybrid", "thinking"):
+            # Load category for each episode
+            for eid in live_episodes:
+                cat = self._store.get_memory_category(eid)
+                episode_categories[eid] = cat
+                category_scores[eid] = CATEGORY_PRIORITY.get(cat, 0.2)
+
+            # Trigger boost: check if query contains any trigger terms
+            query_lower = query.lower()
+            all_triggers = self._store.list_triggers(ns)
+            for trig in all_triggers:
+                term = trig["term"]
+                if term in query_lower:
+                    mem_id = trig["memory_id"]
+                    # Find episodes linked to this memory_id
+                    for eid in live_episodes:
+                        mem_row = conn_execute_safe(
+                            self._store, "SELECT id FROM memory WHERE id = ? AND episode_id = ?",
+                            (mem_id, eid)
+                        )
+                        if mem_row:
+                            trigger_boosts[eid] = trigger_boosts.get(eid, 0.0) + 0.2
+
+        # 7. Combine scores per mode (using configurable weights)
+        w = self._config.weights
         results: list[RecallResult] = []
         for eid, ep in live_episodes.items():
             lex = norm_lexical.get(eid, 0.0)
             vec = norm_vector.get(eid, 0.0)
-            gb = graph_boosts.get(eid, 0.0)
+            gb = graph_path_scores.get(eid, 0.0)
             rec = decay_scores.get(eid, 0.0)
             conf = confidence_scores.get(eid, 0.0)
+            cat_score = category_scores.get(eid, 0.0)
+            trig_boost = trigger_boosts.get(eid, 0.0)
 
             if mode == "fast":
                 # Fast: lexical + vector only (weights renormalised to 0.55/0.45)
@@ -220,23 +352,50 @@ class RecallEngine:
                 else:
                     combined = lex  # FTS-only fallback
             else:
-                # Hybrid / Thinking: all 5 components
+                # Hybrid / Thinking: all components including category
                 if vector_scores:
                     combined = (
-                        WEIGHT_LEXICAL * lex
-                        + WEIGHT_VECTOR * vec
-                        + WEIGHT_GRAPH * gb
-                        + WEIGHT_RECENCY * rec
-                        + WEIGHT_CONFIDENCE * conf
+                        w.lexical * lex
+                        + w.vector * vec
+                        + w.graph * gb
+                        + w.recency * rec
+                        + w.confidence * conf
+                        + w.category * cat_score
                     )
                 else:
                     # FTS-only: redistribute vector weight to lexical
                     combined = (
-                        (WEIGHT_LEXICAL + WEIGHT_VECTOR) * lex
-                        + WEIGHT_GRAPH * gb
-                        + WEIGHT_RECENCY * rec
-                        + WEIGHT_CONFIDENCE * conf
+                        (w.lexical + w.vector) * lex
+                        + w.graph * gb
+                        + w.recency * rec
+                        + w.confidence * conf
+                        + w.category * cat_score
                     )
+                # Apply trigger boost
+                combined += trig_boost
+
+            # Temporal classification: get valid_from/valid_until from entities
+            entity_rows = self._store.get_entities_for_episode(eid)
+            ep_valid_from: Optional[str] = None
+            ep_valid_until: Optional[str] = None
+            for ent_row in entity_rows:
+                if ent_row.get("deleted_at") is not None:
+                    continue
+                vf = ent_row.get("valid_from")
+                vu = ent_row.get("valid_until")
+                if vf and not ep_valid_from:
+                    ep_valid_from = vf
+                if vu and not ep_valid_until:
+                    ep_valid_until = vu
+                if ep_valid_from and ep_valid_until:
+                    break
+
+            temporal_status, temporal_reason = classify_temporal_status(
+                ep_valid_from, ep_valid_until, as_of
+            )
+
+            # Apply temporal score boost
+            combined *= temporal_score_boost(temporal_status, effective_temporal_mode)
 
             # Determine kind (memory or knowledge)
             kind = self._determine_kind(eid)
@@ -267,7 +426,7 @@ class RecallEngine:
                     confidence=round(conf, 4),
                     final=round(combined, 4),
                 )
-                why = _build_why_retrieved(lex, vec, gb, rec, conf, mode)
+                why = _build_why_retrieved(lex, vec, gb, rec, conf, mode, cat_score, trig_boost)
 
             # Build result
             result = RecallResult(
@@ -280,6 +439,11 @@ class RecallEngine:
                 provenance=prov,
                 warnings=[],
                 safety=safety,
+                temporal_status=temporal_status,
+                valid_from=ep_valid_from,
+                valid_until=ep_valid_until,
+                temporal_reason=temporal_reason,
+                category=episode_categories.get(eid, "other"),
             )
             # Store matched_terms as metadata for explanation building
             result._matched_terms = matched  # type: ignore[attr-defined]
@@ -287,6 +451,22 @@ class RecallEngine:
 
         # Sort by score descending
         results.sort(key=lambda r: r.score, reverse=True)
+
+        # Temporal filtering: exclude results that don't match temporal mode
+        results = [
+            r for r in results
+            if should_include_in_mode(r.temporal_status or "unknown", effective_temporal_mode)
+        ]
+
+        # Optional reranking (heuristic or HTTP endpoint)
+        rerank_start = time.monotonic()
+        results = rerank_results(
+            results,
+            query,
+            endpoint=self._config.reranker_endpoint,
+            top_k=self._config.rerank_top_k,
+        )
+        rerank_ms = (time.monotonic() - rerank_start) * 1000
 
         # Apply conflict/supersession warnings in ALL modes
         results = self._apply_conflict_warnings(ns, results)
@@ -329,9 +509,17 @@ class RecallEngine:
                 matched = getattr(r, "_matched_terms", [])
                 if matched:
                     entry["matched_terms"] = matched
+                # Add graph paths from BFS traversal
+                if r.id in graph_paths_data:
+                    entry["graph_paths"] = graph_paths_data[r.id]
                 retrieval_breakdown.append(entry)
 
+            all_graph_paths: list[dict[str, Any]] = []
+            for paths in graph_paths_data.values():
+                all_graph_paths.extend(paths)
+
             explanation = RecallExplanation(
+                query_expansions=query_expansions,
                 query_terms=query_terms,
                 retrieval_breakdown=retrieval_breakdown,
                 latency_ms={
@@ -339,8 +527,13 @@ class RecallEngine:
                     "embedding": round(embedding_ms, 1),
                     "vector": round(vector_ms, 1),
                     "graph": round(graph_ms, 1),
+                    "rerank": round(rerank_ms, 1),
                     "total": round(total_ms, 1),
                 },
+                scoring_config=self._config.weights.to_dict(),
+                graph_paths=all_graph_paths,
+                hop_count=max_hop_count,
+                path_score=round(best_path_score, 4),
             )
 
         return RecallOutput(results=results, explanation=explanation)
@@ -383,6 +576,37 @@ class RecallEngine:
             # All are zero -> all stay zero
             return {k: 0.0 for k in scores}
         return {k: (v - min_val) / spread for k, v in scores.items()}
+
+    # ------------------------------------------------------------------
+    # Per-query search helpers (used by thinking mode expansion)
+    # ------------------------------------------------------------------
+
+    def _search_lexical(
+        self, ns: str, query: str, limit: int
+    ) -> dict[str, float]:
+        """Run FTS5 search and return {episode_id: score}."""
+        fts_rows = self._store.search_fts(ns, query, limit=limit * 3)
+        scores: dict[str, float] = {}
+        for row in fts_rows:
+            ep_id = row["episode_id"]
+            raw_rank = abs(float(row.get("rank", 0.0)))
+            scores[ep_id] = 1.0 / (1.0 + raw_rank)
+        return scores
+
+    def _search_vector(self, ns: str, query: str) -> dict[str, float]:
+        """Run vector similarity search and return {episode_id: score}."""
+        episode_embeddings = self._store.get_all_embeddings(
+            ns, owner_type="episode", model=_DETERMINISTIC_MODEL
+        )
+        if not episode_embeddings:
+            return {}
+        query_vec = self._embedder.embed(query)
+        scores: dict[str, float] = {}
+        for emb_row in episode_embeddings:
+            ep_id = emb_row["owner_id"]
+            vec = _blob_to_vector(emb_row["vector_blob"])
+            scores[ep_id] = self._cosine_similarity(query_vec, vec)
+        return scores
 
     # ------------------------------------------------------------------
     # Component calculators
@@ -591,6 +815,8 @@ def _build_why_retrieved(
     rec: float,
     conf: float,
     mode: str,
+    cat_score: float = 0.0,
+    trig_boost: float = 0.0,
 ) -> str:
     """Generate a human-readable explanation of why a result was retrieved.
 
@@ -604,11 +830,15 @@ def _build_why_retrieved(
         reasons.append("high vector similarity")
     if mode in ("hybrid", "thinking"):
         if gb >= _STRONG_THRESHOLD:
-            reasons.append("graph edge boost")
+            reasons.append("multi-hop graph path")
         if rec >= _STRONG_THRESHOLD:
             reasons.append("recent content")
         if conf >= _STRONG_THRESHOLD:
             reasons.append("high confidence")
+        if cat_score >= 0.7:
+            reasons.append("high-priority category")
+        if trig_boost > 0:
+            reasons.append("trigger term match")
     if not reasons:
         reasons.append("partial match across signals")
     return "; ".join(reasons)

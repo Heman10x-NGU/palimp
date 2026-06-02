@@ -241,6 +241,27 @@ class SQLiteStore:
                 summary         TEXT,
                 FOREIGN KEY (namespace) REFERENCES namespace(name)
             );
+
+            CREATE TABLE IF NOT EXISTS runbook (
+                id              TEXT PRIMARY KEY,
+                namespace       TEXT NOT NULL,
+                kind            TEXT NOT NULL,
+                content         TEXT NOT NULL,
+                source_ref      TEXT,
+                episode_id      TEXT,
+                confidence      REAL NOT NULL DEFAULT 1.0,
+                created_at      TEXT NOT NULL,
+                FOREIGN KEY (namespace) REFERENCES namespace(name)
+            );
+
+            CREATE TABLE IF NOT EXISTS trigger (
+                id          TEXT PRIMARY KEY,
+                namespace   TEXT NOT NULL,
+                term        TEXT NOT NULL,
+                memory_id   TEXT NOT NULL,
+                created_at  TEXT NOT NULL,
+                FOREIGN KEY (namespace) REFERENCES namespace(name)
+            );
             """
         )
 
@@ -254,6 +275,21 @@ class SQLiteStore:
                 conn.execute(f"ALTER TABLE episode ADD COLUMN {col} {col_def}")
             except sqlite3.OperationalError:
                 pass  # column already exists
+
+        # Migration: add category column to memory and knowledge tables
+        for table in ("memory", "knowledge"):
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN category TEXT DEFAULT 'other'")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
+        # Index on entity_alias for fast alias lookups
+        try:
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_entity_alias_alias ON entity_alias(alias)"
+            )
+        except sqlite3.OperationalError:
+            pass
 
         # FTS5 virtual table for episode content
         try:
@@ -470,6 +506,7 @@ class SQLiteStore:
         content: str,
         source_ref: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        category: str = "other",
     ) -> dict[str, str]:
         episode_id = self.insert_episode(ns, content, "memory", source_ref, metadata)
         memory_id = _new_id("mem")
@@ -477,8 +514,8 @@ class SQLiteStore:
         conn = self._conn()
         with self._lock:
             conn.execute(
-                "INSERT INTO memory (id, episode_id, namespace, content, created_at) VALUES (?, ?, ?, ?, ?)",
-                (memory_id, episode_id, ns, content, now),
+                "INSERT INTO memory (id, episode_id, namespace, content, created_at, category) VALUES (?, ?, ?, ?, ?, ?)",
+                (memory_id, episode_id, ns, content, now, category),
             )
             conn.commit()
         return {"memory_id": memory_id, "episode_id": episode_id}
@@ -494,6 +531,7 @@ class SQLiteStore:
         content: str,
         source_ref: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        category: str = "other",
     ) -> dict[str, str]:
         episode_id = self.insert_episode(ns, content, "knowledge", source_ref, metadata)
         knowledge_id = _new_id("knw")
@@ -501,8 +539,8 @@ class SQLiteStore:
         conn = self._conn()
         with self._lock:
             conn.execute(
-                "INSERT INTO knowledge (id, episode_id, namespace, title, content, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (knowledge_id, episode_id, ns, title, content, now),
+                "INSERT INTO knowledge (id, episode_id, namespace, title, content, created_at, category) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (knowledge_id, episode_id, ns, title, content, now, category),
             )
             conn.commit()
         return {"knowledge_id": knowledge_id, "episode_id": episode_id}
@@ -675,6 +713,201 @@ class SQLiteStore:
             (episode_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def find_entity_by_alias(self, ns: str, normalized_name: str) -> Optional[dict[str, Any]]:
+        """Look up an entity by normalized alias within a namespace.
+
+        Returns the entity dict if a matching alias is found and the entity
+        is not deleted, otherwise None.
+        """
+        conn = self._conn()
+        row = conn.execute(
+            """SELECT e.* FROM entity e
+               JOIN entity_alias ea ON ea.entity_id = e.id
+               WHERE ea.alias = ? AND e.namespace = ? AND e.deleted_at IS NULL""",
+            (normalized_name, ns),
+        ).fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    def insert_entity_with_alias(
+        self,
+        ns: str,
+        name: str,
+        entity_type: str,
+        confidence: float = 1.0,
+        source_episode_id: Optional[str] = None,
+        valid_from: Optional[str] = None,
+        valid_until: Optional[str] = None,
+    ) -> str:
+        """Insert an entity with alias-aware deduplication.
+
+        1. Normalize the name.
+        2. Look for an existing entity with the same normalized alias in the
+           namespace.
+        3. If found and types are compatible, reuse the existing entity and
+           insert a new alias row for the surface form (if it differs).
+        4. If not found, create a new entity and alias row.
+
+        Returns the entity_id (existing or newly created).
+        """
+        from graphctx.aliases import entities_compatible, normalize_entity_name
+
+        self.ensure_namespace(ns)
+        normalized = normalize_entity_name(name)
+        now = _now_iso()
+        conn = self._conn()
+
+        with self._lock:
+            existing = self.find_entity_by_alias(ns, normalized)
+
+            if existing and entities_compatible(existing["type"], entity_type):
+                # Reuse existing entity — insert alias for new surface form
+                entity_id = existing["id"]
+                if source_episode_id:
+                    # Check if this exact alias row already exists
+                    dup = conn.execute(
+                        """SELECT id FROM entity_alias
+                           WHERE entity_id = ? AND alias = ?""",
+                        (entity_id, normalized),
+                    ).fetchone()
+                    if dup is None:
+                        conn.execute(
+                            """INSERT INTO entity_alias
+                               (id, entity_id, alias, source_episode_id, confidence)
+                               VALUES (?, ?, ?, ?, ?)""",
+                            (_new_id("als"), entity_id, normalized, source_episode_id, confidence),
+                        )
+                conn.commit()
+                return entity_id
+
+            # Create new entity
+            entity_id = _new_id("ent")
+            conn.execute(
+                """INSERT INTO entity
+                   (id, namespace, name, type, confidence, valid_from, valid_until, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (entity_id, ns, name, entity_type, confidence, valid_from, valid_until, now),
+            )
+            if source_episode_id:
+                conn.execute(
+                    """INSERT INTO entity_alias
+                       (id, entity_id, alias, source_episode_id, confidence)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (_new_id("als"), entity_id, normalized, source_episode_id, confidence),
+                )
+            conn.commit()
+        return entity_id
+
+    def merge_entities(
+        self,
+        ns: str,
+        entity_a_id: str,
+        entity_b_id: str,
+        reason: str = "",
+    ) -> str:
+        """Merge entity B into entity A.
+
+        1. Re-point all edges that reference B to reference A.
+        2. Re-point all claims that reference B to reference A.
+        3. Move provenance rows from B to A.
+        4. Insert alias rows for B's name under A.
+        5. Tombstone (soft-delete) entity B.
+        6. Log the merge in audit_log.
+
+        Returns entity A's id.
+        """
+        now = _now_iso()
+        conn = self._conn()
+
+        with self._lock:
+            # Fetch B so we can record its name as an alias
+            b_row = conn.execute(
+                "SELECT * FROM entity WHERE id = ?", (entity_b_id,)
+            ).fetchone()
+            if b_row is None:
+                raise ValueError(f"Entity B not found: {entity_b_id}")
+            b_name = b_row["name"]
+
+            # 1. Re-point edges
+            conn.execute(
+                "UPDATE edge SET source_entity_id = ? WHERE source_entity_id = ? AND deleted_at IS NULL",
+                (entity_a_id, entity_b_id),
+            )
+            conn.execute(
+                "UPDATE edge SET target_entity_id = ? WHERE target_entity_id = ? AND deleted_at IS NULL",
+                (entity_a_id, entity_b_id),
+            )
+
+            # 2. Re-point claims
+            conn.execute(
+                "UPDATE claim SET subject_entity_id = ? WHERE subject_entity_id = ? AND deleted_at IS NULL",
+                (entity_a_id, entity_b_id),
+            )
+            conn.execute(
+                "UPDATE claim SET object_entity_id = ? WHERE object_entity_id = ? AND deleted_at IS NULL",
+                (entity_a_id, entity_b_id),
+            )
+
+            # 3. Move provenance
+            conn.execute(
+                "UPDATE provenance SET entity_id = ? WHERE entity_id = ?",
+                (entity_a_id, entity_b_id),
+            )
+
+            # 4. Insert alias for B's name under A
+            from graphctx.aliases import normalize_entity_name
+
+            b_normalized = normalize_entity_name(b_name)
+            dup = conn.execute(
+                "SELECT id FROM entity_alias WHERE entity_id = ? AND alias = ?",
+                (entity_a_id, b_normalized),
+            ).fetchone()
+            if dup is None:
+                # Find a provenance episode for the alias source
+                prov_row = conn.execute(
+                    "SELECT episode_id FROM provenance WHERE entity_id = ? LIMIT 1",
+                    (entity_a_id,),
+                ).fetchone()
+                source_ep = prov_row["episode_id"] if prov_row else None
+                if source_ep:
+                    conn.execute(
+                        """INSERT INTO entity_alias
+                           (id, entity_id, alias, source_episode_id, confidence)
+                           VALUES (?, ?, ?, ?, ?)""",
+                        (_new_id("als"), entity_a_id, b_normalized, source_ep, 1.0),
+                    )
+
+            # 5. Tombstone entity B
+            conn.execute(
+                "UPDATE entity SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+                (now, entity_b_id),
+            )
+
+            # 6. Audit log
+            conn.execute(
+                """INSERT INTO audit_log
+                   (id, namespace, actor, action, target_type, target_id, metadata, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    _new_id("aud"),
+                    ns,
+                    "system",
+                    "entity_merge",
+                    "entity",
+                    entity_a_id,
+                    json.dumps({
+                        "merged_entity_id": entity_b_id,
+                        "merged_entity_name": b_name,
+                        "reason": reason,
+                    }),
+                    now,
+                ),
+            )
+
+            conn.commit()
+        return entity_a_id
 
     # ------------------------------------------------------------------
     # Edge
@@ -903,12 +1136,16 @@ class SQLiteStore:
         claims = conn.execute(
             "SELECT COUNT(*) as cnt FROM claim WHERE namespace = ? AND deleted_at IS NULL", (ns,)
         ).fetchone()["cnt"]
+        runbook_count = conn.execute(
+            "SELECT COUNT(*) as cnt FROM runbook WHERE namespace = ?", (ns,)
+        ).fetchone()["cnt"]
         return {
             "memories": memories,
             "knowledge_items": knowledge_items,
             "entities": entities,
             "edges": edges,
             "claims": claims,
+            "runbook_items": runbook_count,
         }
 
     # ------------------------------------------------------------------
@@ -986,6 +1223,127 @@ class SQLiteStore:
             (ns,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Runbook
+    # ------------------------------------------------------------------
+
+    def insert_runbook(
+        self,
+        ns: str,
+        kind: str,
+        content: str,
+        source_ref: Optional[str] = None,
+        episode_id: Optional[str] = None,
+        confidence: float = 1.0,
+    ) -> str:
+        """Insert a runbook entry. Returns the runbook ID."""
+        self.ensure_namespace(ns)
+        runbook_id = _new_id("rbk")
+        now = _now_iso()
+        conn = self._conn()
+        with self._lock:
+            conn.execute(
+                """INSERT INTO runbook
+                   (id, namespace, kind, content, source_ref, episode_id, confidence, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (runbook_id, ns, kind, content, source_ref, episode_id, confidence, now),
+            )
+            conn.commit()
+        return runbook_id
+
+    def list_runbook(
+        self,
+        ns: str,
+        kind: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """List runbook entries for a namespace, optionally filtered by kind."""
+        conn = self._conn()
+        if kind:
+            rows = conn.execute(
+                "SELECT * FROM runbook WHERE namespace = ? AND kind = ? ORDER BY created_at DESC",
+                (ns, kind),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM runbook WHERE namespace = ? ORDER BY created_at DESC",
+                (ns,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_runbook(self, ns: str, runbook_id: str) -> bool:
+        """Delete a runbook entry by ID within a namespace. Returns True if deleted."""
+        conn = self._conn()
+        with self._lock:
+            cur = conn.execute(
+                "DELETE FROM runbook WHERE id = ? AND namespace = ?",
+                (runbook_id, ns),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    # ------------------------------------------------------------------
+    # Trigger glossary
+    # ------------------------------------------------------------------
+
+    def insert_trigger(self, ns: str, term: str, memory_id: str) -> str:
+        """Insert a trigger term linked to a memory ID. Returns the trigger ID."""
+        self.ensure_namespace(ns)
+        trigger_id = _new_id("trg")
+        now = _now_iso()
+        conn = self._conn()
+        with self._lock:
+            conn.execute(
+                """INSERT INTO trigger (id, namespace, term, memory_id, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (trigger_id, ns, term.lower(), memory_id, now),
+            )
+            conn.commit()
+        return trigger_id
+
+    def list_triggers(self, ns: str) -> list[dict[str, Any]]:
+        """List all trigger terms for a namespace."""
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM trigger WHERE namespace = ? ORDER BY created_at DESC",
+            (ns,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_trigger(self, ns: str, term: str) -> bool:
+        """Delete a trigger by term within a namespace. Returns True if deleted."""
+        conn = self._conn()
+        with self._lock:
+            cur = conn.execute(
+                "DELETE FROM trigger WHERE namespace = ? AND term = ?",
+                (ns, term.lower()),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def get_triggers_for_term(self, ns: str, term: str) -> list[dict[str, Any]]:
+        """Get all triggers matching a term in a namespace."""
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM trigger WHERE namespace = ? AND term = ?",
+            (ns, term.lower()),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_memory_category(self, episode_id: str) -> str:
+        """Get the category for a memory or knowledge item by its episode ID."""
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT category FROM memory WHERE episode_id = ?", (episode_id,)
+        ).fetchone()
+        if row is not None:
+            return row["category"] or "other"
+        row = conn.execute(
+            "SELECT category FROM knowledge WHERE episode_id = ?", (episode_id,)
+        ).fetchone()
+        if row is not None:
+            return row["category"] or "other"
+        return "other"
 
     # ------------------------------------------------------------------
     # Integrity / diagnostics

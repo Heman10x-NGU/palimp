@@ -86,6 +86,9 @@ def memory_batch(
 def memory_add(
     content: str = typer.Argument(help="Memory content text."),
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
+    category: str = typer.Option(
+        "other", "--category", "-c", help="Memory category (identity, preference, project_config, constraint, architecture_decision, workflow, gotcha, bug_fix, command_result, tool_usage, knowledge, other)."
+    ),
     source_ref: Optional[str] = typer.Option(
         None, "--source-ref", "-s", help="Source reference."
     ),
@@ -94,6 +97,12 @@ def memory_add(
     ),
 ) -> None:
     """Add a memory to the context graph."""
+    from graphctx.models import MEMORY_CATEGORIES
+
+    if category not in MEMORY_CATEGORIES:
+        typer.echo(f"Error: invalid category '{category}'. Choose from: {', '.join(MEMORY_CATEGORIES)}", err=True)
+        raise typer.Exit(code=1)
+
     try:
         ns = validate_namespace(namespace)
         validate_content(content)
@@ -117,6 +126,7 @@ def memory_add(
         ns=ns,
         content=content,
         source_ref=source_ref,
+        category=category,
     )
     typer.echo(f"memory_id: {result['memory_id']}")
     typer.echo(f"episode_id: {result['episode_id']}")
@@ -178,6 +188,9 @@ def knowledge_batch(
 def knowledge_add(
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     title: str = typer.Option(..., "--title", "-t", help="Knowledge title."),
+    category: str = typer.Option(
+        "other", "--category", "-k", help="Knowledge category (identity, preference, project_config, constraint, architecture_decision, workflow, gotcha, bug_fix, command_result, tool_usage, knowledge, other)."
+    ),
     file: Optional[str] = typer.Option(
         None, "--file", "-f", help="Path to content file."
     ),
@@ -192,6 +205,12 @@ def knowledge_add(
     ),
 ) -> None:
     """Add a knowledge document to the context graph."""
+    from graphctx.models import MEMORY_CATEGORIES
+
+    if category not in MEMORY_CATEGORIES:
+        typer.echo(f"Error: invalid category '{category}'. Choose from: {', '.join(MEMORY_CATEGORIES)}", err=True)
+        raise typer.Exit(code=1)
+
     try:
         ns = validate_namespace(namespace)
     except ValidationError as exc:
@@ -231,12 +250,429 @@ def knowledge_add(
         title=title,
         content=body,
         source_ref=source_ref,
+        category=category,
     )
     typer.echo(f"knowledge_id: {result['knowledge_id']}")
     typer.echo(f"episode_id: {result['episode_id']}")
     typer.echo(f"entities: {len(result['entities'])}")
     typer.echo(f"claims: {len(result['claims'])}")
     typer.echo(f"warnings: {len(result['warnings'])}")
+
+
+# ---------------------------------------------------------------------------
+# entity merge
+# ---------------------------------------------------------------------------
+
+entity_app = typer.Typer(help="Entity commands.")
+app.add_typer(entity_app, name="entity")
+
+
+@entity_app.command("merge")
+def entity_merge(
+    entity_a: str = typer.Argument(help="Entity ID to keep (merge target)."),
+    entity_b: str = typer.Argument(help="Entity ID to merge and tombstone."),
+    namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
+    reason: str = typer.Option("", "--reason", "-r", help="Reason for the merge."),
+    db: str = typer.Option(
+        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+    ),
+) -> None:
+    """Merge entity B into entity A: move edges, claims, provenance, then tombstone B."""
+    try:
+        ns = validate_namespace(namespace)
+    except ValidationError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    from graphctx.storage import SQLiteStore
+
+    resolved = os.path.expanduser(db)
+    store = SQLiteStore(resolved)
+
+    # Verify both entities exist
+    entities_a = store.get_entities_by_ids([entity_a])
+    entities_b = store.get_entities_by_ids([entity_b])
+    if not entities_a:
+        typer.echo(f"Error: entity not found: {entity_a}", err=True)
+        raise typer.Exit(code=1)
+    if not entities_b:
+        typer.echo(f"Error: entity not found: {entity_b}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        result_id = store.merge_entities(ns, entity_a, entity_b, reason=reason)
+    except Exception as exc:
+        typer.echo(f"Error: merge failed: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Merged {entity_b} into {result_id}")
+    typer.echo(f"Entity B ({entities_b[0]['name']}) tombstoned.")
+
+
+# ---------------------------------------------------------------------------
+# trigger
+# ---------------------------------------------------------------------------
+
+trigger_app = typer.Typer(help="Trigger glossary commands.")
+app.add_typer(trigger_app, name="trigger")
+
+
+@trigger_app.command("add")
+def trigger_add(
+    namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
+    term: str = typer.Option(..., "--term", "-t", help="Trigger term."),
+    memory_id: str = typer.Option(..., "--memory-id", "-m", help="Memory ID to link."),
+    db: str = typer.Option(
+        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+    ),
+) -> None:
+    """Add a trigger term linked to a memory."""
+    try:
+        ns = validate_namespace(namespace)
+    except ValidationError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    from graphctx.storage import SQLiteStore
+
+    resolved = os.path.expanduser(db)
+    store = SQLiteStore(resolved)
+    trigger_id = store.insert_trigger(ns=ns, term=term, memory_id=memory_id)
+    typer.echo(f"trigger_id: {trigger_id}")
+    typer.echo(f"term:       {term.lower()}")
+    typer.echo(f"memory_id:  {memory_id}")
+
+
+@trigger_app.command("list")
+def trigger_list(
+    namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
+    db: str = typer.Option(
+        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+    ),
+) -> None:
+    """List trigger terms for a namespace."""
+    try:
+        ns = validate_namespace(namespace)
+    except ValidationError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    from graphctx.storage import SQLiteStore
+
+    resolved = os.path.expanduser(db)
+    store = SQLiteStore(resolved)
+    triggers = store.list_triggers(ns=ns)
+    if not triggers:
+        typer.echo("No triggers found.")
+        return
+    for t in triggers:
+        typer.echo(f"[{t['id']}] term={t['term']}  memory_id={t['memory_id']}")
+
+
+@trigger_app.command("delete")
+def trigger_delete(
+    namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
+    term: str = typer.Option(..., "--term", "-t", help="Trigger term to delete."),
+    db: str = typer.Option(
+        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+    ),
+) -> None:
+    """Delete a trigger term by name."""
+    try:
+        ns = validate_namespace(namespace)
+    except ValidationError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    from graphctx.storage import SQLiteStore
+
+    resolved = os.path.expanduser(db)
+    store = SQLiteStore(resolved)
+    deleted = store.delete_trigger(ns=ns, term=term)
+    if deleted:
+        typer.echo(f"Deleted trigger '{term}'")
+    else:
+        typer.echo(f"Trigger not found: '{term}'", err=True)
+        raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# runbook
+# ---------------------------------------------------------------------------
+
+_VALID_RUNBOOK_KINDS = {
+    "gotcha",
+    "workflow",
+    "command_fix",
+    "project_invariant",
+    "dependency_note",
+    "debug_trace",
+    "architecture_decision",
+}
+
+runbook_app = typer.Typer(help="Runbook commands for coding-agent context.")
+app.add_typer(runbook_app, name="runbook")
+
+
+@runbook_app.command("add")
+def runbook_add(
+    namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
+    kind: str = typer.Option(..., "--kind", "-k", help="Runbook kind."),
+    content: str = typer.Option(..., "--content", "-c", help="Runbook content."),
+    source_ref: Optional[str] = typer.Option(
+        None, "--source-ref", "-s", help="Source reference."
+    ),
+    confidence: float = typer.Option(1.0, "--confidence", help="Confidence 0-1."),
+    db: str = typer.Option(
+        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+    ),
+) -> None:
+    """Add a runbook entry (gotcha, workflow, command_fix, etc.)."""
+    try:
+        ns = validate_namespace(namespace)
+        validate_content(content)
+    except ValidationError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    if kind not in _VALID_RUNBOOK_KINDS:
+        typer.echo(
+            f"Error: invalid kind '{kind}'. Choose from: {', '.join(sorted(_VALID_RUNBOOK_KINDS))}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    from graphctx.storage import SQLiteStore
+
+    resolved = os.path.expanduser(db)
+    store = SQLiteStore(resolved)
+    rb_id = store.insert_runbook(
+        ns=ns, kind=kind, content=content,
+        source_ref=source_ref, confidence=confidence,
+    )
+    typer.echo(f"runbook_id: {rb_id}")
+
+
+@runbook_app.command("list")
+def runbook_list(
+    namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
+    kind: Optional[str] = typer.Option(None, "--kind", "-k", help="Filter by kind."),
+    db: str = typer.Option(
+        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+    ),
+) -> None:
+    """List runbook entries for a namespace."""
+    try:
+        ns = validate_namespace(namespace)
+    except ValidationError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    from graphctx.storage import SQLiteStore
+
+    resolved = os.path.expanduser(db)
+    store = SQLiteStore(resolved)
+    entries = store.list_runbook(ns=ns, kind=kind)
+    if not entries:
+        typer.echo("No runbook entries found.")
+        return
+    for entry in entries:
+        typer.echo(f"[{entry['id']}] ({entry['kind']}) {entry['content']}")
+        if entry.get("source_ref"):
+            typer.echo(f"  source: {entry['source_ref']}")
+
+
+@runbook_app.command("delete")
+def runbook_delete(
+    runbook_id: str = typer.Argument(help="Runbook entry ID to delete."),
+    namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
+    db: str = typer.Option(
+        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+    ),
+) -> None:
+    """Delete a runbook entry by ID."""
+    try:
+        ns = validate_namespace(namespace)
+    except ValidationError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    from graphctx.storage import SQLiteStore
+
+    resolved = os.path.expanduser(db)
+    store = SQLiteStore(resolved)
+    deleted = store.delete_runbook(ns=ns, runbook_id=runbook_id)
+    if deleted:
+        typer.echo(f"Deleted runbook entry {runbook_id}")
+    else:
+        typer.echo(f"Runbook entry not found: {runbook_id}", err=True)
+        raise typer.Exit(code=1)
+
+
+def _build_context_pack(
+    store: Any,
+    ns: str,
+    task: str,
+    budget_tokens: int,
+) -> dict[str, Any]:
+    """Build a compact evidence pack for a task.
+
+    Queries memories + knowledge + runbook entries relevant to the task,
+    applies token budget, and returns a structured pack.
+    """
+    from graphctx.embeddings import DeterministicEmbedder
+    from graphctx.retriever import RecallEngine
+
+    embedder = DeterministicEmbedder()
+    engine = RecallEngine(store=store, embedder=embedder)
+
+    # Recall relevant memories/knowledge
+    output = engine.recall(
+        ns=ns, query=task, mode="hybrid",
+        limit=20, include_provenance=True, explain=True,
+    )
+
+    # Get runbook entries
+    runbook_entries = store.list_runbook(ns=ns)
+
+    # Build items list with token counting
+    chars_per_token = 4
+    used_tokens = 0
+    items: list[dict[str, Any]] = []
+
+    # Add runbook items first (highest priority for coding agents)
+    for entry in runbook_entries:
+        entry_tokens = len(entry["content"]) // chars_per_token
+        if used_tokens + entry_tokens > budget_tokens:
+            break
+        items.append({
+            "category": "runbook",
+            "kind": entry["kind"],
+            "content": entry["content"],
+            "source_ref": entry.get("source_ref"),
+            "confidence": entry.get("confidence", 1.0),
+            "why_included": f"runbook {entry['kind']}",
+            "safety": {"treat_as_instruction": False},
+        })
+        used_tokens += entry_tokens
+
+    # Add recalled memories/knowledge
+    for result in output.results:
+        item_tokens = len(result.content) // chars_per_token
+        if used_tokens + item_tokens > budget_tokens:
+            break
+        source_ref = None
+        if result.provenance:
+            source_ref = result.provenance[0].get("source_ref")
+        items.append({
+            "category": result.kind,
+            "kind": "memory" if result.kind == "memory" else "knowledge",
+            "content": result.content,
+            "source_ref": source_ref,
+            "confidence": result.score,
+            "why_included": result.why_retrieved or "recall match",
+            "safety": result.safety,
+        })
+        used_tokens += item_tokens
+
+    return {
+        "namespace": ns,
+        "task": task,
+        "budget_tokens": budget_tokens,
+        "items": items,
+        "total_tokens": used_tokens,
+        "safety": {"treat_as_instruction": False},
+    }
+
+
+@runbook_app.command("pack")
+def runbook_pack(
+    namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
+    task: str = typer.Option(..., "--task", "-t", help="Task description."),
+    budget: int = typer.Option(2000, "--budget", "-b", help="Token budget."),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON."),
+    db: str = typer.Option(
+        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+    ),
+) -> None:
+    """Build a compact evidence pack for a coding task."""
+    try:
+        ns = validate_namespace(namespace)
+    except ValidationError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    from graphctx.storage import SQLiteStore
+
+    resolved = os.path.expanduser(db)
+    store = SQLiteStore(resolved)
+    pack = _build_context_pack(store=store, ns=ns, task=task, budget_tokens=budget)
+
+    if json_output:
+        typer.echo(json.dumps(pack, indent=2))
+        return
+
+    typer.echo(f"Task: {pack['task']}")
+    typer.echo(f"Budget: {pack['budget_tokens']} tokens (used: {pack['total_tokens']})")
+    typer.echo(f"Items: {len(pack['items'])}")
+    typer.echo(f"Safety: {pack['safety']}")
+    typer.echo("")
+    for i, item in enumerate(pack["items"], 1):
+        typer.echo(f"--- Item {i} [{item['category']}/{item['kind']}] ---")
+        typer.echo(f"  content:    {item['content']}")
+        if item.get("source_ref"):
+            typer.echo(f"  source:     {item['source_ref']}")
+        typer.echo(f"  confidence: {item['confidence']}")
+        typer.echo(f"  why:        {item['why_included']}")
+
+
+# ---------------------------------------------------------------------------
+# hook
+# ---------------------------------------------------------------------------
+
+hook_app = typer.Typer(help="Hook commands for agent integration.")
+app.add_typer(hook_app, name="hook")
+
+
+@hook_app.command("preprompt")
+def hook_preprompt(
+    namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
+    task: str = typer.Option(..., "--task", "-t", help="Task description."),
+    budget: int = typer.Option(2000, "--budget", "-b", help="Token budget."),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON."),
+    db: str = typer.Option(
+        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+    ),
+) -> None:
+    """Generate a preprompt context pack for an agent task.
+
+    Returns context pack + runbook items + recent memories + safety metadata.
+    Works without running REST server (direct SQLite access).
+    """
+    try:
+        ns = validate_namespace(namespace)
+    except ValidationError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    from graphctx.storage import SQLiteStore
+
+    resolved = os.path.expanduser(db)
+    store = SQLiteStore(resolved)
+    pack = _build_context_pack(store=store, ns=ns, task=task, budget_tokens=budget)
+
+    if json_output:
+        typer.echo(json.dumps(pack, indent=2))
+        return
+
+    typer.echo(f"namespace: {pack['namespace']}")
+    typer.echo(f"task:      {pack['task']}")
+    typer.echo(f"budget:    {pack['budget_tokens']} tokens")
+    typer.echo(f"used:      {pack['total_tokens']} tokens")
+    typer.echo(f"safety:    {pack['safety']}")
+    typer.echo(f"items:     {len(pack['items'])}")
+    for item in pack["items"]:
+        typer.echo(f"  [{item['category']}] {item['content'][:80]}")
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +690,12 @@ def recall(
     limit: int = typer.Option(8, "--limit", "-l", help="Max results."),
     explain: bool = typer.Option(
         False, "--explain", "-e", help="Show score breakdown, why_retrieved, and provenance."
+    ),
+    as_of: Optional[str] = typer.Option(
+        None, "--as-of", help="ISO timestamp for temporal reference time."
+    ),
+    temporal_mode: str = typer.Option(
+        "auto", "--temporal-mode", help="Temporal filtering: auto, current, historical, all."
     ),
     db: str = typer.Option(
         "~/.graphctx/graphctx.db", help="Path to SQLite database."
@@ -282,6 +724,8 @@ def recall(
         limit=limit,
         include_provenance=True,
         explain=explain,
+        as_of=as_of,
+        temporal_mode=temporal_mode,
     )
 
     if not output.results:
@@ -408,6 +852,7 @@ def stats(
     typer.echo(f"entities:        {data['entities']}")
     typer.echo(f"edges:           {data['edges']}")
     typer.echo(f"claims:          {data['claims']}")
+    typer.echo(f"runbook_items:   {data.get('runbook_items', 0)}")
 
 
 # ---------------------------------------------------------------------------
@@ -426,6 +871,7 @@ _REQUIRED_TABLES = {
     "provenance",
     "embedding",
     "audit_log",
+    "runbook",
 }
 
 
@@ -925,6 +1371,21 @@ def benchmark(
     typer.echo(f"    Found before:   {ts['found_before_tombstone']}")
     typer.echo(f"    Found after:    {ts['found_after_tombstone']}")
     typer.echo(f"    Excluded:       {ts['excluded']}")
+
+    # v3 config
+    v3 = results.get("v3_config", {})
+    if v3:
+        typer.echo(f"\n  V3 Config")
+        typer.echo(f"    Graph max hops:       {v3.get('graph_max_hops', '?')}")
+        typer.echo(f"    Temporal filter:      {v3.get('temporal_filter_enabled', '?')}")
+        typer.echo(f"    Alias dedup:          {v3.get('alias_dedup_enabled', '?')}")
+        typer.echo(f"    Reranker enabled:     {v3.get('reranker_enabled', '?')}")
+        cat_dist = v3.get("category_distribution", {})
+        if cat_dist:
+            typer.echo(f"    Category distribution:")
+            for cat, count in sorted(cat_dist.items()):
+                typer.echo(f"      {cat}: {count}")
+
     typer.echo(f"{'=' * 60}")
 
 
@@ -944,7 +1405,7 @@ def eval_mini(
         "/tmp/graphctx_eval.db", help="Path to temporary SQLite database."
     ),
 ) -> None:
-    """Run the mini evaluation suite (9 categories)."""
+    """Run the mini evaluation suite (15 categories)."""
     from graphctx.eval import run_eval_mini
 
     resolved = os.path.expanduser(db)

@@ -8,6 +8,25 @@ from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
+# Category system
+# ---------------------------------------------------------------------------
+
+MEMORY_CATEGORIES = [
+    "identity", "preference", "project_config", "constraint",
+    "architecture_decision", "workflow", "gotcha", "bug_fix",
+    "command_result", "tool_usage", "knowledge", "other",
+]
+
+# Priority scores for AdaCoM budget (higher = more likely to survive compression)
+CATEGORY_PRIORITY = {
+    "identity": 1.0, "constraint": 0.95, "gotcha": 0.9,
+    "project_config": 0.85, "architecture_decision": 0.8,
+    "preference": 0.7, "workflow": 0.6, "bug_fix": 0.55,
+    "command_result": 0.4, "tool_usage": 0.35, "knowledge": 0.3, "other": 0.2,
+}
+
+
+# ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------
 
@@ -15,6 +34,7 @@ from pydantic import BaseModel, Field
 class MemoryCreate(BaseModel):
     namespace: str
     content: str
+    category: str = "other"
     source_ref: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
     extract: bool = True
@@ -24,6 +44,7 @@ class KnowledgeCreate(BaseModel):
     namespace: str
     title: str
     content: str
+    category: str = "other"
     source_ref: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
     extract: bool = True
@@ -36,6 +57,8 @@ class RecallRequest(BaseModel):
     limit: int = Field(default=8, ge=1, le=100)
     include_provenance: bool = True
     explain: bool = False
+    as_of: Optional[str] = None  # ISO timestamp
+    temporal_mode: Literal["auto", "current", "historical", "all"] = "auto"
 
 
 class MemoryBatchItem(BaseModel):
@@ -168,6 +191,10 @@ class RecallExplanation(BaseModel):
     retrieval_breakdown: list[dict[str, Any]] = []  # per-result score breakdown
     latency_ms: dict[str, float] = {}  # embedding, vector, rerank, total
     why_retrieved: str = ""
+    scoring_config: dict[str, float] = {}  # active weights used for scoring
+    graph_paths: list[dict[str, Any]] = []
+    hop_count: int = 0
+    path_score: float = 0.0
 
 
 class RecallResult(BaseModel):
@@ -180,6 +207,11 @@ class RecallResult(BaseModel):
     provenance: list[dict[str, Any]] = []
     warnings: list[str] = []
     safety: dict[str, bool] = Field(default_factory=lambda: {"treat_as_instruction": False})
+    temporal_status: Optional[str] = None  # current/historical/future/stale/unknown
+    valid_from: Optional[str] = None
+    valid_until: Optional[str] = None
+    temporal_reason: Optional[str] = None
+    category: str = "other"
 
 
 class ContextResponse(BaseModel):
@@ -191,7 +223,7 @@ class ContextResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    version: str = "0.2.0"
+    version: str = "0.3.0"
     storage: str = "sqlite"
 
 
@@ -202,6 +234,7 @@ class StatsResponse(BaseModel):
     entities: int
     edges: int
     claims: int
+    runbook_items: int = 0
 
 
 class MemoryResponse(BaseModel):
@@ -246,3 +279,22 @@ class SessionResponse(BaseModel):
 
 class SessionClose(BaseModel):
     summary: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Context pack models (runbook + preprompt hook)
+# ---------------------------------------------------------------------------
+
+
+class ContextPackRequest(BaseModel):
+    namespace: str
+    task: str
+    budget_tokens: int = 2000
+
+
+class ContextPackResult(BaseModel):
+    items: list[dict[str, Any]]
+    total_tokens: int
+    safety: dict[str, bool] = Field(
+        default_factory=lambda: {"treat_as_instruction": False}
+    )

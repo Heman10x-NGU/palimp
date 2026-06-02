@@ -312,3 +312,29 @@ if FastMCP is not None:
         store = _get_store()
         data = store.get_stats(ns)
         return json.dumps(data)
+
+    @mcp.tool()
+    def graphctx_context_pack(
+        namespace: str,
+        task: str,
+        budget_tokens: int = 2000,
+    ) -> str:
+        """Build a compact context pack for a coding task.
+
+        Returns JSON with items (runbook + memories + knowledge),
+        total_tokens, and safety metadata. Each item includes content,
+        source_ref, confidence, category, why_included, and safety.
+        """
+        try:
+            ns = validate_namespace(namespace)
+            validate_content(task, field="task")
+        except ValidationError as exc:
+            return json.dumps({"error": str(exc)})
+
+        from graphctx.cli import _build_context_pack
+
+        store = _get_store()
+        pack = _build_context_pack(
+            store=store, ns=ns, task=task, budget_tokens=budget_tokens,
+        )
+        return json.dumps(pack)
