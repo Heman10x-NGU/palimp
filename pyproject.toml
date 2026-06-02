@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graphctx"
+version = "0.2.0"
+description = "Open-source local context graph for AI agents — memories, knowledge, recall, provenance, and MCP access in a SQLite-first package."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fastapi>=0.109",
+    "uvicorn>=0.27",
+    "pydantic>=2.5",
+    "numpy>=1.24",
+    "httpx>=0.26",
+    "typer>=0.12",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.1", "httpx"]
+
+[project.scripts]
+graphctx = "graphctx.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["graphctx*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "--ignore=_refs"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
