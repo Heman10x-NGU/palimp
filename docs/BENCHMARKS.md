@@ -2,10 +2,10 @@
 
 ## Local Benchmark Command
 
-GraphCtx includes a local benchmark command for measuring ingest and recall performance on your own machine:
+Palimp includes a local benchmark command for measuring ingest and recall performance on your own machine:
 
 ```bash
-graphctx benchmark --namespace bench --items 1000 --queries 100
+palimp benchmark --namespace bench --items 1000 --queries 100
 ```
 
 This measures:
@@ -26,28 +26,28 @@ This measures:
 For structured output suitable for CI or automated tracking:
 
 ```bash
-graphctx benchmark --namespace bench --items 1000 --queries 100 --json
+palimp benchmark --namespace bench --items 1000 --queries 100 --json
 ```
 
 ## Important Caveats
 
 **Results are machine-specific and not comparable to hosted platforms.**
 
-GraphCtx runs locally on your hardware. Benchmark numbers depend on your CPU, disk speed, available memory, and SQLite configuration. They are not comparable to:
+Palimp runs locally on your hardware. Benchmark numbers depend on your CPU, disk speed, available memory, and SQLite configuration. They are not comparable to:
 
 - Hosted memory platforms (Mem0, HydraDB, Zep) that run on dedicated infrastructure
 - Benchmarks published with GPU-accelerated embedding models
 - Results from cloud VMs with different hardware profiles
 
-GraphCtx reports local benchmarks and mini-evals. Standard LoCoMo/LongMemEval/BEAM parity requires running the same benchmark harness and should not be claimed from local synthetic tests.
+Palimp reports local benchmarks and mini-evals. Standard LoCoMo/LongMemEval/BEAM parity requires running the same benchmark harness and should not be claimed from local synthetic tests.
 
-Use `graphctx benchmark` to:
+Use `palimp benchmark` to:
 
-- Track performance regressions across GraphCtx versions on the same machine
+- Track performance regressions across Palimp versions on the same machine
 - Compare retrieval modes (fast vs. hybrid vs. thinking) on your hardware
 - Validate that your SQLite configuration is performing as expected
 
-Do not use `graphctx benchmark` to:
+Do not use `palimp benchmark` to:
 
 - Claim parity with hosted platforms
 - Compare against published LoCoMo or LongMemEval scores
@@ -58,12 +58,12 @@ Do not use `graphctx benchmark` to:
 For a correctness-focused evaluation (not a performance benchmark):
 
 ```bash
-graphctx eval mini --namespace eval --json
+palimp eval mini --namespace eval --json
 ```
 
-This runs category-level pass/fail checks for single-hop recall, temporal facts, contradiction handling, namespace isolation, prompt injection safety, and deletion exclusion. See `graphctx eval mini --help` for details.
+This runs category-level pass/fail checks for single-hop recall, temporal facts, contradiction handling, namespace isolation, prompt injection safety, and deletion exclusion. See `palimp eval mini --help` for details.
 
-**This is a local mini-eval, not LongMemEval or LoCoMo.** It validates that GraphCtx's retrieval logic works correctly on your machine, not that it achieves competitive scores on academic benchmarks.
+**This is a local mini-eval, not LongMemEval or LoCoMo.** It validates that Palimp's retrieval logic works correctly on your machine, not that it achieves competitive scores on academic benchmarks.
 
 ## v0.3 Expanded Mini-Eval
 
@@ -76,7 +76,7 @@ single-hop preference, static knowledge, temporal current, temporal historical, 
 actual 2-hop bridge, actual 3-hop bridge (when enabled), alias dedup, category priority under budget, trigger keyword recall, runbook gotcha pack, no-answer abstention / low-confidence suppression
 
 ```bash
-graphctx eval mini --namespace eval --json
+palimp eval mini --namespace eval --json
 ```
 
 ## v0.3 Performance Benchmark
@@ -84,18 +84,18 @@ graphctx eval mini --namespace eval --json
 Extended benchmark reports v0.3 configuration details:
 
 ```bash
-graphctx benchmark --items 10000 --queries 300 --json
+palimp benchmark --items 10000 --queries 300 --json
 ```
 
 Output includes: graph max hops, temporal filter status, alias dedup status, reranker status, and per-mode latency.
 
 ## Standard Benchmark Adapter
 
-GraphCtx provides a retrieval-only adapter for standard memory benchmarks. This adapter supports LongMemEval retrieval-only evaluation as a first target, with LoCoMo retrieval-only as a secondary target.
+Palimp provides a retrieval-only adapter for standard memory benchmarks. This adapter supports LongMemEval retrieval-only evaluation as a first target, with LoCoMo retrieval-only as a secondary target.
 
-> **Important:** GraphCtx reports local benchmarks and mini-evals. Standard LoCoMo/LongMemEval/BEAM parity requires running the same benchmark harness and should not be claimed from local synthetic tests.
+> **Important:** Palimp reports local benchmarks and mini-evals. Standard LoCoMo/LongMemEval/BEAM parity requires running the same benchmark harness and should not be claimed from local synthetic tests.
 
-The adapter lives in `benchmarks/graphctx_adapter/` and uses `mem0ai/memory-benchmarks` shapes for ingest, search, and evaluate/predict-only operations.
+The adapter lives in `benchmarks/palimp_adapter/` and uses `mem0ai/memory-benchmarks` shapes for ingest, search, and evaluate/predict-only operations.
 
 ## Sources
 

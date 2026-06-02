@@ -1,4 +1,4 @@
-"""Tests for GraphCtx REST API server."""
+"""Tests for Palimp REST API server."""
 
 from __future__ import annotations
 
@@ -7,22 +7,22 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from graphctx.server import app
+from palimp.server import app
 
 
 @pytest.fixture()
 def client(tmp_path):
     """Yield a TestClient backed by a temp SQLite database."""
     db_path = str(tmp_path / "test_server.db")
-    old_val = os.environ.get("GRAPHCTX_DB")
-    os.environ["GRAPHCTX_DB"] = db_path
+    old_val = os.environ.get("PALIMP_DB")
+    os.environ["PALIMP_DB"] = db_path
     with TestClient(app) as c:
         yield c
     # Restore env
     if old_val is None:
-        os.environ.pop("GRAPHCTX_DB", None)
+        os.environ.pop("PALIMP_DB", None)
     else:
-        os.environ["GRAPHCTX_DB"] = old_val
+        os.environ["PALIMP_DB"] = old_val
 
 
 # ---------------------------------------------------------------------------

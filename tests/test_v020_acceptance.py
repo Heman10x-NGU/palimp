@@ -1,4 +1,4 @@
-"""Acceptance tests for GraphCtx v0.2.0 — plan section 6.
+"""Acceptance tests for Palimp v0.2.0 — plan section 6.
 
 Covers the tests not already present in other test files:
 1.  Version consistency across package, health response, and pyproject.toml
@@ -14,12 +14,10 @@ from __future__ import annotations
 
 import os
 import re
-import struct
 
-import pytest
 from typer.testing import CliRunner
 
-from graphctx.cli import app
+from palimp.cli import app
 
 runner = CliRunner()
 
@@ -36,9 +34,9 @@ class TestVersionConsistency:
     """All version surfaces must agree."""
 
     def test_package_version(self):
-        import graphctx
+        import palimp
 
-        assert graphctx.__version__ == "0.3.0"
+        assert palimp.__version__ == "0.3.0"
 
     def test_pyproject_toml_version(self):
         pyproject = os.path.join(_PROJECT_ROOT, "pyproject.toml")
@@ -51,11 +49,11 @@ class TestVersionConsistency:
     def test_health_response_version(self, tmp_path):
         """Health endpoint returns the same version as the package."""
         from fastapi.testclient import TestClient
-        from graphctx.server import app as server_app
+        from palimp.server import app as server_app
 
         db_path = str(tmp_path / "version_test.db")
-        old = os.environ.get("GRAPHCTX_DB")
-        os.environ["GRAPHCTX_DB"] = db_path
+        old = os.environ.get("PALIMP_DB")
+        os.environ["PALIMP_DB"] = db_path
         try:
             with TestClient(server_app) as client:
                 resp = client.get("/v1/health")
@@ -63,15 +61,15 @@ class TestVersionConsistency:
                 assert resp.json()["version"] == "0.3.0"
         finally:
             if old is None:
-                os.environ.pop("GRAPHCTX_DB", None)
+                os.environ.pop("PALIMP_DB", None)
             else:
-                os.environ["GRAPHCTX_DB"] = old
+                os.environ["PALIMP_DB"] = old
 
     def test_versions_all_match(self):
         """Single assertion: __version__, pyproject, and health all equal."""
-        import graphctx
+        import palimp
 
-        pkg_ver = graphctx.__version__
+        pkg_ver = palimp.__version__
 
         pyproject = os.path.join(_PROJECT_ROOT, "pyproject.toml")
         text = open(pyproject).read()
@@ -205,7 +203,7 @@ class TestCliAddCreatesEmbeddings:
         )
         assert result.exit_code == 0, result.stdout
 
-        from graphctx.storage import SQLiteStore
+        from palimp.storage import SQLiteStore
 
         store = SQLiteStore(db_path)
         embeddings = store.get_all_embeddings("emb_test", "episode", "deterministic-sha256")
@@ -232,7 +230,7 @@ class TestCliAddCreatesEmbeddings:
         )
         assert result.exit_code == 0, result.stdout
 
-        from graphctx.storage import SQLiteStore
+        from palimp.storage import SQLiteStore
 
         store = SQLiteStore(db_path)
         embeddings = store.get_all_embeddings("emb_test", "episode", "deterministic-sha256")
@@ -278,7 +276,7 @@ class TestCliAddWithExtraction:
         )
         assert result.exit_code == 0, result.stdout
 
-        from graphctx.storage import SQLiteStore
+        from palimp.storage import SQLiteStore
 
         store = SQLiteStore(db_path)
         stats = store.get_stats("ext_db")
@@ -326,7 +324,7 @@ class TestTombstonedExclusion:
             ],
         )
 
-        from graphctx.storage import SQLiteStore
+        from palimp.storage import SQLiteStore
 
         store = SQLiteStore(db_path)
 
@@ -356,11 +354,11 @@ class TestTombstonedExclusion:
     def test_deleted_source_not_in_fast_recall(self, tmp_path):
         """REST delete + fast recall exclusion."""
         from fastapi.testclient import TestClient
-        from graphctx.server import app as server_app
+        from palimp.server import app as server_app
 
         db_path = str(tmp_path / "del_test.db")
-        old = os.environ.get("GRAPHCTX_DB")
-        os.environ["GRAPHCTX_DB"] = db_path
+        old = os.environ.get("PALIMP_DB")
+        os.environ["PALIMP_DB"] = db_path
         try:
             with TestClient(server_app) as client:
                 # Add knowledge
@@ -395,9 +393,9 @@ class TestTombstonedExclusion:
                 assert ep_id not in result_ids
         finally:
             if old is None:
-                os.environ.pop("GRAPHCTX_DB", None)
+                os.environ.pop("PALIMP_DB", None)
             else:
-                os.environ["GRAPHCTX_DB"] = old
+                os.environ["PALIMP_DB"] = old
 
 
 # ---------------------------------------------------------------------------
@@ -411,11 +409,11 @@ class TestPromptInjectionSafety:
     def test_injection_memory_safety_flag(self, tmp_path):
         """A memory containing injection attempts must have treat_as_instruction=False."""
         from fastapi.testclient import TestClient
-        from graphctx.server import app as server_app
+        from palimp.server import app as server_app
 
         db_path = str(tmp_path / "inj_mem.db")
-        old = os.environ.get("GRAPHCTX_DB")
-        os.environ["GRAPHCTX_DB"] = db_path
+        old = os.environ.get("PALIMP_DB")
+        os.environ["PALIMP_DB"] = db_path
         try:
             with TestClient(server_app) as client:
                 # Add a memory with injection payload
@@ -453,18 +451,18 @@ class TestPromptInjectionSafety:
                     )
         finally:
             if old is None:
-                os.environ.pop("GRAPHCTX_DB", None)
+                os.environ.pop("PALIMP_DB", None)
             else:
-                os.environ["GRAPHCTX_DB"] = old
+                os.environ["PALIMP_DB"] = old
 
     def test_injection_knowledge_safety_flag(self, tmp_path):
         """A knowledge item with injection attempts must have treat_as_instruction=False."""
         from fastapi.testclient import TestClient
-        from graphctx.server import app as server_app
+        from palimp.server import app as server_app
 
         db_path = str(tmp_path / "inj_knw.db")
-        old = os.environ.get("GRAPHCTX_DB")
-        os.environ["GRAPHCTX_DB"] = db_path
+        old = os.environ.get("PALIMP_DB")
+        os.environ["PALIMP_DB"] = db_path
         try:
             with TestClient(server_app) as client:
                 injection = (
@@ -499,15 +497,15 @@ class TestPromptInjectionSafety:
                     assert r["safety"]["treat_as_instruction"] is False
         finally:
             if old is None:
-                os.environ.pop("GRAPHCTX_DB", None)
+                os.environ.pop("PALIMP_DB", None)
             else:
-                os.environ["GRAPHCTX_DB"] = old
+                os.environ["PALIMP_DB"] = old
 
     def test_injection_safety_in_all_modes(self):
         """treat_as_instruction=False across fast, hybrid, and thinking modes."""
-        from graphctx.embeddings import DeterministicEmbedder
-        from graphctx.retriever import RecallEngine, _vector_to_blob
-        from graphctx.storage import SQLiteStore
+        from palimp.embeddings import DeterministicEmbedder
+        from palimp.retriever import RecallEngine, _vector_to_blob
+        from palimp.storage import SQLiteStore
 
         store = SQLiteStore(":memory:")
         embedder = DeterministicEmbedder(dim=384)

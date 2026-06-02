@@ -1,6 +1,6 @@
-# GraphCtx Launch — Twitter Thread
+# Palimp Launch — Twitter Thread
 
-> 7-tweet thread for GraphCtx launch.
+> 7-tweet thread for Palimp launch.
 > Positioning: local OSS alternative to HydraDB's core context-graph primitive.
 > Not a HydraDB replacement. Not a Mem0 clone. A local-first, inspectable context graph.
 
@@ -8,7 +8,7 @@
 
 ## Tweet 1 — Hook
 
-I built GraphCtx — an open-source local context graph for AI agents.
+I built Palimp — an open-source local context graph for AI agents.
 
 Memories. Knowledge. Recall. Provenance. MCP access.
 All in SQLite. No cloud. No vendor lock-in.
@@ -31,7 +31,7 @@ None of them let you inspect what the agent actually "remembers."
 
 ## Tweet 3 — Solution
 
-GraphCtx gives you HydraDB-style primitives locally:
+Palimp gives you HydraDB-style primitives locally:
 
 - memories (dynamic context)
 - knowledge (static docs/specs)
@@ -39,7 +39,7 @@ GraphCtx gives you HydraDB-style primitives locally:
 - context graph (entities, claims, relations)
 - provenance (every fact linked to its source)
 
-All in a single `pip install graphctx`.
+All in a single `pip install palimp`.
 
 ---
 
@@ -72,8 +72,8 @@ Stack:
 ## Tweet 6 — How to Try
 
 ```
-pip install graphctx
-graphctx serve --port 8420
+pip install palimp
+palimp serve --port 8420
 
 curl -X POST localhost:8420/v1/memories \
   -d '{"namespace":"demo","content":"Alice prefers concise answers"}'
@@ -85,7 +85,7 @@ Every result includes provenance and safety metadata.
 
 ## Tweet 7 — CTA
 
-GraphCtx is not a HydraDB replacement. It's the local OSS alternative to the core context-graph idea.
+Palimp is not a HydraDB replacement. It's the local OSS alternative to the core context-graph idea.
 
 If you build agents and want inspectable, safe, local memory — try it.
 
@@ -97,7 +97,7 @@ If you build agents and want inspectable, safe, local memory — try it.
 
 ## Tweet 8 — AdaCoM Context Management
 
-GraphCtx now includes AdaCoM-inspired context management (arXiv:2605.30785).
+Palimp now includes AdaCoM-inspired context management (arXiv:2605.30785).
 
 - Deduplicates memories with >70% content overlap
 - Relevance-scores and compresses to fit agent token budgets
@@ -124,7 +124,7 @@ Local-first memory that behaves like real memory — it forgets, unless you tell
 
 From the plan (section 1):
 
-> GraphCtx is an open-source, local-first alternative to HydraDB's core memory/context-graph primitive for developers who want inspectable agent context without a hosted black box.
+> Palimp is an open-source, local-first alternative to HydraDB's core memory/context-graph primitive for developers who want inspectable agent context without a hosted black box.
 
 **Do not claim:**
 - "Full HydraDB replacement."

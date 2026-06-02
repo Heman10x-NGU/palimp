@@ -1,4 +1,4 @@
-"""GraphCtx benchmark command implementation.
+"""Palimp benchmark command implementation.
 
 Generates synthetic fixtures, ingests them, measures recall latency,
 and reports performance metrics.
@@ -6,20 +6,17 @@ and reports performance metrics.
 
 from __future__ import annotations
 
-import json
 import os
 import random
 import statistics
-import struct
 import time
 from typing import Any
 
-from graphctx.config import get_config
-from graphctx.embeddings import DeterministicEmbedder
-from graphctx.extractor import RuleBasedExtractor
-from graphctx.ingest import ingest_memory, ingest_knowledge
-from graphctx.retriever import RecallEngine
-from graphctx.storage import SQLiteStore
+from palimp.config import get_config
+from palimp.embeddings import DeterministicEmbedder
+from palimp.ingest import ingest_memory, ingest_knowledge
+from palimp.retriever import RecallEngine
+from palimp.storage import SQLiteStore
 
 _DETERMINISTIC_MODEL = "deterministic-sha256"
 
@@ -357,7 +354,7 @@ def run_benchmark(
     queries : int
         Number of synthetic recall queries per mode.
     db_path : str | None
-        Path to SQLite database. Defaults to /tmp/graphctx_bench.db.
+        Path to SQLite database. Defaults to /tmp/palimp_bench.db.
 
     Returns
     -------
@@ -366,7 +363,7 @@ def run_benchmark(
         DB stats, and tombstoned exclusion check.
     """
     if db_path is None:
-        db_path = "/tmp/graphctx_bench.db"
+        db_path = "/tmp/palimp_bench.db"
 
     # Clean up any existing file
     if os.path.exists(db_path):

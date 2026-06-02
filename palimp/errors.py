@@ -1,18 +1,18 @@
-"""GraphCtx custom exceptions."""
+"""Palimp custom exceptions."""
 
 
-class GraphCtxError(Exception):
-    """Base exception for all GraphCtx errors."""
+class PalimpError(Exception):
+    """Base exception for all Palimp errors."""
 
 
-class NamespaceRequiredError(GraphCtxError):
+class NamespaceRequiredError(PalimpError):
     """Raised when a namespace is required but not provided."""
 
     def __init__(self, msg: str = "Namespace is required for this operation."):
         super().__init__(msg)
 
 
-class DimensionDriftError(GraphCtxError):
+class DimensionDriftError(PalimpError):
     """Raised when an embedding dimension does not match the existing dimension in the DB."""
 
     def __init__(self, expected: int, got: int):
@@ -23,14 +23,14 @@ class DimensionDriftError(GraphCtxError):
         )
 
 
-class ExtractionFailedError(GraphCtxError):
+class ExtractionFailedError(PalimpError):
     """Raised when entity/edge/claim extraction fails."""
 
     def __init__(self, msg: str = "Extraction failed; source stored without graph facts."):
         super().__init__(msg)
 
 
-class EpisodeNotFoundError(GraphCtxError):
+class EpisodeNotFoundError(PalimpError):
     """Raised when an episode cannot be found."""
 
     def __init__(self, episode_id: str):

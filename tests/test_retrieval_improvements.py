@@ -11,16 +11,13 @@ Covers:
 
 from __future__ import annotations
 
-import struct
 
-import pytest
 from typer.testing import CliRunner
 
-from graphctx.cli import app
-from graphctx.embeddings import DeterministicEmbedder
-from graphctx.models import RecallResult, RecallExplanation
-from graphctx.retriever import RecallEngine, _vector_to_blob, _extract_query_terms
-from graphctx.storage import SQLiteStore
+from palimp.cli import app
+from palimp.embeddings import DeterministicEmbedder
+from palimp.retriever import RecallEngine, _vector_to_blob
+from palimp.storage import SQLiteStore
 
 runner = CliRunner()
 

@@ -6,12 +6,12 @@ import json
 
 import pytest
 
-from graphctx.cli import _build_context_pack
-from graphctx.embeddings import DeterministicEmbedder
-from graphctx.extractor import RuleBasedExtractor
-from graphctx.ingest import ingest_memory
-from graphctx.models import ContextPackRequest, ContextPackResult
-from graphctx.storage import SQLiteStore
+from palimp.cli import _build_context_pack
+from palimp.embeddings import DeterministicEmbedder
+from palimp.extractor import RuleBasedExtractor
+from palimp.ingest import ingest_memory
+from palimp.models import ContextPackRequest, ContextPackResult
+from palimp.storage import SQLiteStore
 
 
 @pytest.fixture
@@ -47,7 +47,7 @@ class TestRunbookAddAndList:
         rb_id = store.insert_runbook(
             ns=ns,
             kind="gotcha",
-            content="pytest requires GRAPHCTX_DB=:memory: for isolated tests",
+            content="pytest requires PALIMP_DB=:memory: for isolated tests",
             source_ref="docs/testing.md",
             confidence=0.95,
         )

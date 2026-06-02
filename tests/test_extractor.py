@@ -1,17 +1,16 @@
-"""Tests for graphctx.extractor — Phase 2 extraction layer."""
+"""Tests for palimp.extractor — Phase 2 extraction layer."""
 
 from __future__ import annotations
 
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 
-from graphctx.extractor import (
+from palimp.extractor import (
     HttpExtractor,
     RuleBasedExtractor,
 )
-from graphctx.models import ExtractionResult
+from palimp.models import ExtractionResult
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +184,7 @@ class TestHttpExtractor:
             ]
         }
 
-        with patch("graphctx.extractor.httpx") as mock_httpx_module:
+        with patch("palimp.extractor.httpx") as mock_httpx_module:
             mock_client = MagicMock()
             mock_client.post.return_value = mock_response
             mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -227,7 +226,7 @@ class TestHttpExtractor:
             "choices": [{"message": {"content": llm_payload}}]
         }
 
-        with patch("graphctx.extractor.httpx") as mock_httpx_module:
+        with patch("palimp.extractor.httpx") as mock_httpx_module:
             mock_client = MagicMock()
             mock_client.post.return_value = mock_response
             mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -249,7 +248,7 @@ class TestHttpExtractor:
             timeout=5.0,
         )
 
-        with patch("graphctx.extractor.httpx") as mock_httpx_module:
+        with patch("palimp.extractor.httpx") as mock_httpx_module:
             mock_client = MagicMock()
             mock_client.post.side_effect = ConnectionError("refused")
             mock_client.__enter__ = MagicMock(return_value=mock_client)

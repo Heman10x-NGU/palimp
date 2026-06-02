@@ -1,4 +1,4 @@
-"""Deliberate break tests for GraphCtx invariants.
+"""Deliberate break tests for Palimp invariants.
 
 These tests verify critical safety and correctness properties:
 - 11.2: Namespace leakage
@@ -11,8 +11,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from graphctx.errors import DimensionDriftError
-from graphctx.storage import SQLiteStore
+from palimp.errors import DimensionDriftError
+from palimp.storage import SQLiteStore
 
 
 class TestNamespaceLeakage:
@@ -49,7 +49,7 @@ class TestDeletionCascade:
         # Create an episode with entity + provenance
         ep_id = store.insert_episode("test-ns", "GraphCtx uses SQLite.", "knowledge")
         entity_id = store.insert_entity("test-ns", "GraphCtx", "Project")
-        prov_id = store.insert_provenance("test-ns", ep_id, entity_id=entity_id)
+        store.insert_provenance("test-ns", ep_id, entity_id=entity_id)
 
         # Entity should be visible
         entities = store.get_entities_for_episode(ep_id)
@@ -59,7 +59,6 @@ class TestDeletionCascade:
         store.tombstone_episode(ep_id)
 
         # Entity should now be tombstoned (deleted_at set)
-        from graphctx.storage import _now_iso
         conn = store._conn()
         entity_row = conn.execute("SELECT deleted_at FROM entity WHERE id = ?", (entity_id,)).fetchone()
         assert entity_row is not None

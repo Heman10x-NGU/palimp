@@ -1,14 +1,11 @@
-"""Tests for GraphCtx CLI commands."""
+"""Tests for Palimp CLI commands."""
 
 from __future__ import annotations
 
-import json
-import os
 
-import pytest
 from typer.testing import CliRunner
 
-from graphctx.cli import app
+from palimp.cli import app
 
 runner = CliRunner()
 

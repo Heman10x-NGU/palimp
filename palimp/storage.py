@@ -1,4 +1,4 @@
-"""SQLite storage layer for GraphCtx.
+"""SQLite storage layer for Palimp.
 
 Implements all 11 tables plus FTS5, WAL mode, and namespace isolation.
 """
@@ -13,8 +13,8 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
-from graphctx.errors import DimensionDriftError, EpisodeNotFoundError
-from graphctx.models import BatchResponse
+from palimp.errors import DimensionDriftError
+from palimp.models import BatchResponse
 
 
 def _now_iso() -> str:
@@ -752,7 +752,7 @@ class SQLiteStore:
 
         Returns the entity_id (existing or newly created).
         """
-        from graphctx.aliases import entities_compatible, normalize_entity_name
+        from palimp.aliases import entities_compatible, normalize_entity_name
 
         self.ensure_namespace(ns)
         normalized = normalize_entity_name(name)
@@ -857,7 +857,7 @@ class SQLiteStore:
             )
 
             # 4. Insert alias for B's name under A
-            from graphctx.aliases import normalize_entity_name
+            from palimp.aliases import normalize_entity_name
 
             b_normalized = normalize_entity_name(b_name)
             dup = conn.execute(

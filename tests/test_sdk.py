@@ -7,33 +7,33 @@ import os
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from graphctx.sdk import GraphCtxClient
-from graphctx.server import app
+from palimp.sdk import PalimpClient
+from palimp.server import app
 
 
 @pytest.fixture()
 async def sdk(tmp_path):
-    """Yield a GraphCtxClient pointed at the test ASGI app.
+    """Yield a PalimpClient pointed at the test ASGI app.
 
     Manually runs the lifespan so app.state is populated.
     """
     db_path = str(tmp_path / "test_sdk.db")
-    old_val = os.environ.get("GRAPHCTX_DB")
-    os.environ["GRAPHCTX_DB"] = db_path
+    old_val = os.environ.get("PALIMP_DB")
+    os.environ["PALIMP_DB"] = db_path
 
     # Run lifespan to populate app.state
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)
-        client = GraphCtxClient.__new__(GraphCtxClient)
+        client = PalimpClient.__new__(PalimpClient)
         client._base = "http://testserver"
         client._client = AsyncClient(transport=transport, base_url="http://testserver")
         yield client
         await client._client.aclose()
 
     if old_val is None:
-        os.environ.pop("GRAPHCTX_DB", None)
+        os.environ.pop("PALIMP_DB", None)
     else:
-        os.environ["GRAPHCTX_DB"] = old_val
+        os.environ["PALIMP_DB"] = old_val
 
 
 @pytest.mark.asyncio

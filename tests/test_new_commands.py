@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import os
 
 import pytest
 from typer.testing import CliRunner
 
-from graphctx.cli import app
+from palimp.cli import app
 
 runner = CliRunner()
 
@@ -16,7 +15,7 @@ runner = CliRunner()
 @pytest.fixture
 def db_path(tmp_path):
     """Return a path to a temporary database."""
-    return str(tmp_path / "test_graphctx.db")
+    return str(tmp_path / "test_palimp.db")
 
 
 @pytest.fixture
@@ -71,7 +70,7 @@ class TestInitAgent:
         assert "Starter knowledge inserted:" in result.output
 
         # Verify data is actually in the DB
-        from graphctx.storage import SQLiteStore
+        from palimp.storage import SQLiteStore
 
         store = SQLiteStore(db_path)
         stats = store.get_stats("test")
@@ -86,7 +85,7 @@ class TestInitAgent:
         )
         assert result.exit_code == 0, result.output
         assert "mcpServers" in result.output
-        assert "graphctx" in result.output
+        assert "palimp" in result.output
         assert "serve" in result.output
 
     def test_init_agent_client_variants(self, db_path):
@@ -123,7 +122,7 @@ class TestImportCommand:
         assert "skipped:" in result.output
 
         # Verify in DB
-        from graphctx.storage import SQLiteStore
+        from palimp.storage import SQLiteStore
 
         store = SQLiteStore(db_path)
         stats = store.get_stats("test")

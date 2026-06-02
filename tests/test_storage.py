@@ -1,6 +1,6 @@
 """Tests for the SQLite storage layer."""
 
-from graphctx.storage import SQLiteStore
+from palimp.storage import SQLiteStore
 
 
 class TestInsertMemoryAndRetrieve:
@@ -131,7 +131,7 @@ class TestProvenanceLinksToEpisode:
         ep_id = store.insert_episode("test-ns", "Claim content.", "memory")
         ent = store.insert_entity("test-ns", "GraphCtx", "Project")
         claim_id = store.insert_claim("test-ns", ent, "USES", "SQLite")
-        prov_id = store.insert_provenance("test-ns", ep_id, claim_id=claim_id)
+        store.insert_provenance("test-ns", ep_id, claim_id=claim_id)
         prov_list = store.get_provenance_for(claim_id=claim_id)
         assert len(prov_list) == 1
 

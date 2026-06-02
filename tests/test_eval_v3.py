@@ -1,14 +1,12 @@
-"""Tests for GraphCtx eval v3 (15 categories) and benchmark v3 metrics."""
+"""Tests for Palimp eval v3 (15 categories) and benchmark v3 metrics."""
 
 from __future__ import annotations
 
 import json
-import os
 
-import pytest
 from typer.testing import CliRunner
 
-from graphctx.cli import app
+from palimp.cli import app
 
 runner = CliRunner()
 
@@ -112,9 +110,7 @@ def test_benchmark_v3_metrics(tmp_path):
 
 def test_multi_hop_2hop_eval(tmp_path):
     """Multi-hop 2-hop bridge category passes."""
-    from graphctx.embeddings import DeterministicEmbedder
-    from graphctx.eval import run_eval_mini
-    from graphctx.storage import SQLiteStore
+    from palimp.eval import run_eval_mini
 
     db_path = str(tmp_path / "eval_2hop.db")
     results = run_eval_mini(ns="eval_2hop", db_path=db_path)
@@ -128,7 +124,7 @@ def test_multi_hop_2hop_eval(tmp_path):
 
 def test_alias_dedup_eval(tmp_path):
     """Alias dedup category passes."""
-    from graphctx.eval import run_eval_mini
+    from palimp.eval import run_eval_mini
 
     db_path = str(tmp_path / "eval_alias.db")
     results = run_eval_mini(ns="eval_alias", db_path=db_path)

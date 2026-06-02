@@ -1,13 +1,12 @@
-"""Tests for graphctx benchmark and eval mini commands."""
+"""Tests for palimp benchmark and eval mini commands."""
 
 from __future__ import annotations
 
 import json
 
-import pytest
 from typer.testing import CliRunner
 
-from graphctx.cli import app
+from palimp.cli import app
 
 runner = CliRunner()
 

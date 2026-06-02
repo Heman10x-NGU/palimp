@@ -1,6 +1,6 @@
 """Optional reranker — local heuristic or HTTP endpoint.
 
-Provides reranking for recall results. When GRAPHCTX_RERANKER_ENDPOINT
+Provides reranking for recall results. When PALIMP_RERANKER_ENDPOINT
 is set, scores are boosted by an external cross-encoder.  Otherwise a
 lightweight local heuristic reranks by term overlap, entity kind, and
 temporal freshness.

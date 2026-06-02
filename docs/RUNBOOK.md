@@ -19,20 +19,20 @@ Runbook mode lets coding agents build a project-specific knowledge base of gotch
 ### Add a runbook entry
 
 ```bash
-graphctx runbook add --namespace repo --kind gotcha \
-  --content "pytest requires GRAPHCTX_DB=:memory: for isolated tests"
+palimp runbook add --namespace repo --kind gotcha \
+  --content "pytest requires PALIMP_DB=:memory: for isolated tests"
 ```
 
 ### List runbook entries
 
 ```bash
-graphctx runbook list --namespace repo
+palimp runbook list --namespace repo
 ```
 
 ### Pack a context bundle
 
 ```bash
-graphctx runbook pack --namespace repo \
+palimp runbook pack --namespace repo \
   --task "fix failing storage tests" --budget 2000
 ```
 
@@ -48,16 +48,16 @@ Output is a compact JSON bundle containing:
 ### Delete a runbook entry
 
 ```bash
-graphctx runbook delete --namespace repo --entry-id <id>
+palimp runbook delete --namespace repo --entry-id <id>
 ```
 
 ## MCP Tool
 
-The `graphctx_context_pack` MCP tool provides the same functionality as `graphctx runbook pack`:
+The `palimp_context_pack` MCP tool provides the same functionality as `palimp runbook pack`:
 
 ```json
 {
-  "tool": "graphctx_context_pack",
+  "tool": "palimp_context_pack",
   "arguments": {
     "namespace": "repo",
     "task": "fix failing storage tests",
@@ -73,7 +73,7 @@ Returns a structured context pack suitable for injection into an agent's system 
 For agent integration without running a REST server:
 
 ```bash
-graphctx hook preprompt --namespace repo \
+palimp hook preprompt --namespace repo \
   --task "refactor retriever module" --budget 2000 --json
 ```
 
@@ -90,19 +90,19 @@ The JSON shape is stable and documented. The `safety.treat_as_instruction` field
 
 ```bash
 # Day 1: Build the runbook as you work
-graphctx runbook add --namespace myapp --kind gotcha \
+palimp runbook add --namespace myapp --kind gotcha \
   --content "SQLite WAL mode required for concurrent reads during tests"
-graphctx runbook add --namespace myapp --kind command_fix \
+palimp runbook add --namespace myapp --kind command_fix \
   --content "uv build failed with --locked; fix: run uv lock first"
-graphctx runbook add --namespace myapp --kind workflow \
-  --content "Run graphctx eval mini before every release"
+palimp runbook add --namespace myapp --kind workflow \
+  --content "Run palimp eval mini before every release"
 
 # Day N: Pack context before a task
-graphctx runbook pack --namespace myapp \
+palimp runbook pack --namespace myapp \
   --task "prepare v0.3 release" --budget 2000
 
 # Or use the preprompt hook for agent integration
-graphctx hook preprompt --namespace myapp \
+palimp hook preprompt --namespace myapp \
   --task "prepare v0.3 release" --budget 2000 --json
 ```
 

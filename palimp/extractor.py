@@ -1,4 +1,4 @@
-"""GraphCtx extraction layer.
+"""Palimp extraction layer.
 
 Provides a base extractor interface plus:
 - RuleBasedExtractor: deterministic, zero-dependency extractor for testing.
@@ -11,11 +11,11 @@ import json
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
-from graphctx.models import ExtractionResult
+from palimp.models import ExtractionResult
 
 logger = logging.getLogger(__name__)
 
@@ -304,15 +304,30 @@ class HttpExtractor(BaseExtractor):
             f"Text:\n{text}"
         )
 
-        payload: dict[str, Any] = {
-            "model": self._model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.0,
-        }
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self._api_key}",
-        }
+        is_anthropic = "anthropic" in self._endpoint or "/messages" in self._endpoint
+        if is_anthropic:
+            payload: dict[str, Any] = {
+                "model": self._model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 4096,
+                "temperature": 0.0,
+            }
+            headers = {
+                "Content-Type": "application/json",
+                "x-api-key": self._api_key,
+                "anthropic-version": "2023-06-01",
+            }
+        else:
+            payload = {
+                "model": self._model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.0,
+            }
+            headers = {
+                "Content-Type": "application/json",
+            }
+            if self._api_key and self._api_key.strip():
+                headers["Authorization"] = f"Bearer {self._api_key}"
 
         try:
             with httpx.Client(timeout=self._timeout) as client:
@@ -325,7 +340,17 @@ class HttpExtractor(BaseExtractor):
 
         try:
             body = resp.json()
-            content_str = body["choices"][0]["message"]["content"]
+            if is_anthropic:
+                content_str = body["content"][0]["text"]
+            else:
+                content_str = body["choices"][0]["message"]["content"]
+
+            content_str = content_str.strip()
+            if "```json" in content_str:
+                content_str = content_str.split("```json")[1].split("```")[0].strip()
+            elif "```" in content_str:
+                content_str = content_str.split("```")[1].split("```")[0].strip()
+
             data = json.loads(content_str)
         except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
             msg = f"HttpExtractor: failed to parse response as JSON: {exc}"

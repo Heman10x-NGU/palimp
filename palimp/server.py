@@ -1,4 +1,4 @@
-"""GraphCtx REST API server.
+"""Palimp REST API server.
 
 FastAPI application exposing HydraDB-style primitives:
 memories, knowledge, recall, context, and source deletion.
@@ -14,21 +14,18 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from graphctx.embeddings import BaseEmbedder, DeterministicEmbedder, HttpEmbedder
-from graphctx.errors import (
-    DimensionDriftError,
+from palimp.embeddings import BaseEmbedder, DeterministicEmbedder, HttpEmbedder
+from palimp.errors import (
     EpisodeNotFoundError,
-    ExtractionFailedError,
-    GraphCtxError,
+    PalimpError,
     NamespaceRequiredError,
 )
-from graphctx.extractor import BaseExtractor, HttpExtractor, RuleBasedExtractor
-from graphctx.models import (
+from palimp.extractor import BaseExtractor, HttpExtractor, RuleBasedExtractor
+from palimp.models import (
     BatchResponse,
     ContextPackRequest,
     ContextPackResult,
     ContextResponse,
-    DeleteResponse,
     HealthResponse,
     KnowledgeBatchCreate,
     KnowledgeCreate,
@@ -36,20 +33,18 @@ from graphctx.models import (
     MemoryBatchCreate,
     MemoryCreate,
     MemoryResponse,
-    RecallExplanation,
     RecallRequest,
     SessionClose,
     SessionCreate,
     SessionResponse,
     StatsResponse,
 )
-from graphctx.ingest import ingest_knowledge, ingest_memory
-from graphctx.retriever import RecallEngine
-from graphctx.storage import SQLiteStore
-from graphctx.validate import (
+from palimp.ingest import ingest_knowledge, ingest_memory
+from palimp.retriever import RecallEngine
+from palimp.storage import SQLiteStore
+from palimp.validate import (
     ValidationError,
     validate_batch_size,
-    validate_content,
     validate_namespace,
 )
 
@@ -70,27 +65,27 @@ MAX_REQUEST_BYTES = 1_048_576  # 1 MB
 async def lifespan(app: FastAPI):
     """Create store, embedder, extractor, and recall engine on startup."""
     # DB path
-    db_path = os.environ.get("GRAPHCTX_DB", os.path.expanduser("~/.graphctx/graphctx.db"))
+    db_path = os.environ.get("PALIMP_DB", os.path.expanduser("~/.palimp/palimp.db"))
 
     # Embedder
-    embedder_endpoint = os.environ.get("GRAPHCTX_EMBEDDER_ENDPOINT")
+    embedder_endpoint = os.environ.get("PALIMP_EMBEDDER_ENDPOINT")
     if embedder_endpoint:
         embedder: BaseEmbedder = HttpEmbedder(
             endpoint=embedder_endpoint,
-            api_key=os.environ.get("GRAPHCTX_EMBEDDER_API_KEY", ""),
-            model=os.environ.get("GRAPHCTX_EMBEDDER_MODEL", "text-embedding-3-small"),
-            dim=int(os.environ.get("GRAPHCTX_EMBEDDER_DIM", "384")),
+            api_key=os.environ.get("PALIMP_EMBEDDER_API_KEY", ""),
+            model=os.environ.get("PALIMP_EMBEDDER_MODEL", "text-embedding-3-small"),
+            dim=int(os.environ.get("PALIMP_EMBEDDER_DIM", "384")),
         )
     else:
         embedder = DeterministicEmbedder()
 
     # Extractor
-    extractor_endpoint = os.environ.get("GRAPHCTX_EXTRACTOR_ENDPOINT")
+    extractor_endpoint = os.environ.get("PALIMP_EXTRACTOR_ENDPOINT")
     if extractor_endpoint:
         extractor: BaseExtractor = HttpExtractor(
             endpoint=extractor_endpoint,
-            api_key=os.environ.get("GRAPHCTX_EXTRACTOR_API_KEY", ""),
-            model=os.environ.get("GRAPHCTX_EXTRACTOR_MODEL", "gpt-4o-mini"),
+            api_key=os.environ.get("PALIMP_EXTRACTOR_API_KEY", ""),
+            model=os.environ.get("PALIMP_EXTRACTOR_MODEL", "gpt-4o-mini"),
         )
     else:
         extractor = RuleBasedExtractor()
@@ -115,7 +110,7 @@ async def lifespan(app: FastAPI):
 # FastAPI app
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="GraphCtx", version=VERSION, lifespan=lifespan)
+app = FastAPI(title="Palimp", version=VERSION, lifespan=lifespan)
 
 # CORS — allow all origins for v0.1
 app.add_middleware(
@@ -165,11 +160,11 @@ async def namespace_required_handler(_request: Request, exc: NamespaceRequiredEr
     )
 
 
-@app.exception_handler(GraphCtxError)
-async def graph_ctx_error_handler(_request: Request, exc: GraphCtxError):
+@app.exception_handler(PalimpError)
+async def graph_ctx_error_handler(_request: Request, exc: PalimpError):
     return JSONResponse(
         status_code=400,
-        content={"error": "GraphCtx error", "detail": str(exc)},
+        content={"error": "Palimp error", "detail": str(exc)},
     )
 
 
@@ -382,7 +377,7 @@ def context_pack(body: ContextPackRequest) -> ContextPackResult:
 
     Returns runbook items + relevant memories/knowledge within token budget.
     """
-    from graphctx.cli import _build_context_pack
+    from palimp.cli import _build_context_pack
 
     ns = validate_namespace(body.namespace)
     store: SQLiteStore = app.state.store
@@ -400,7 +395,7 @@ def context_pack(body: ContextPackRequest) -> ContextPackResult:
 
 @app.get("/v1/context/{entity_id}")
 def context_entity(entity_id: str, namespace: str) -> ContextResponse:
-    ns = validate_namespace(namespace)
+    validate_namespace(namespace)
     store: SQLiteStore = app.state.store
 
     # Fetch entity
@@ -534,7 +529,7 @@ def list_sessions(namespace: str) -> list[dict[str, Any]]:
 @app.post("/v1/admin/decay/run")
 def run_decay(namespace: str) -> dict[str, Any]:
     """Manually trigger a decay pass: touch all non-pinned episodes with expired retention."""
-    from graphctx.decay import compute_decay_score
+    from palimp.decay import compute_decay_score
 
     ns = validate_namespace(namespace)
     store: SQLiteStore = app.state.store

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from graphctx.decay import DEFAULT_STABILITY, compute_decay_score, ebbinghaus_retention
-from graphctx.embeddings import DeterministicEmbedder
-from graphctx.retriever import RecallEngine
-from graphctx.storage import SQLiteStore
+from palimp.decay import DEFAULT_STABILITY, compute_decay_score, ebbinghaus_retention
+from palimp.embeddings import DeterministicEmbedder
+from palimp.retriever import RecallEngine
+from palimp.storage import SQLiteStore
 
 
 class TestEbbinghausRetention:

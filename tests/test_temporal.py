@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 
-import pytest
 
-from graphctx.temporal import (
+from palimp.temporal import (
     classify_temporal_status,
     detect_temporal_cues,
     should_include_in_mode,

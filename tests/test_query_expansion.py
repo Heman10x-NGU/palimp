@@ -10,18 +10,16 @@ Covers:
 - Query expansions in explanation
 """
 
-import struct
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Optional
 
-import pytest
 
-from graphctx.embeddings import DeterministicEmbedder
-from graphctx.models import RecallResult
-from graphctx.query_expansion import expand_query, merge_expansion_results
-from graphctx.reranker import rerank_results
-from graphctx.retriever import RecallEngine, _vector_to_blob
-from graphctx.storage import SQLiteStore
+from palimp.embeddings import DeterministicEmbedder
+from palimp.models import RecallResult
+from palimp.query_expansion import expand_query, merge_expansion_results
+from palimp.reranker import rerank_results
+from palimp.retriever import RecallEngine, _vector_to_blob
+from palimp.storage import SQLiteStore
 
 
 # ---------------------------------------------------------------------------

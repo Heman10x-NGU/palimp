@@ -1,16 +1,15 @@
-"""Shared test fixtures for GraphCtx."""
+"""Shared test fixtures for Palimp."""
 
-import tempfile
 
 import pytest
 
-from graphctx.storage import SQLiteStore
+from palimp.storage import SQLiteStore
 
 
 @pytest.fixture
 def tmp_db(tmp_path):
     """Return a path to a temporary SQLite database."""
-    return str(tmp_path / "test_graphctx.db")
+    return str(tmp_path / "test_palimp.db")
 
 
 @pytest.fixture

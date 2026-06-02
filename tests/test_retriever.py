@@ -8,14 +8,12 @@ Covers all deliberate break tests from the plan:
 - Empty namespace
 """
 
-import struct
 
-import pytest
 
-from graphctx.embeddings import DeterministicEmbedder
-from graphctx.models import RecallResult, ScoreBreakdown
-from graphctx.retriever import RecallEngine, RecallOutput, _vector_to_blob
-from graphctx.storage import SQLiteStore
+from palimp.embeddings import DeterministicEmbedder
+from palimp.models import ScoreBreakdown
+from palimp.retriever import RecallEngine, _vector_to_blob
+from palimp.storage import SQLiteStore
 
 
 # ---------------------------------------------------------------------------

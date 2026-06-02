@@ -1,13 +1,13 @@
-"""GraphCtx Python async SDK.
+"""Palimp Python async SDK.
 
-Provides a thin async client for the GraphCtx REST API using httpx.
+Provides a thin async client for the Palimp REST API using httpx.
 
 Usage::
 
-    from graphctx.sdk import GraphCtxClient
+    from palimp.sdk import PalimpClient
 
     async def main():
-        client = GraphCtxClient()
+        client = PalimpClient()
         result = await client.add_memory("demo", "Alice prefers concise answers.")
         print(result["memory_id"])
         await client.close()
@@ -20,8 +20,8 @@ from typing import Any, Optional
 import httpx
 
 
-class GraphCtxClient:
-    """Async client for the GraphCtx REST API."""
+class PalimpClient:
+    """Async client for the Palimp REST API."""
 
     def __init__(self, base_url: str = "http://localhost:8420"):
         self._base = base_url.rstrip("/")
@@ -31,7 +31,7 @@ class GraphCtxClient:
         """Close the underlying HTTP client."""
         await self._client.aclose()
 
-    async def __aenter__(self) -> GraphCtxClient:
+    async def __aenter__(self) -> PalimpClient:
         return self
 
     async def __aexit__(self, *exc: object) -> None:

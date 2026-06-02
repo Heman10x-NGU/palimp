@@ -5,12 +5,11 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
-import pytest
 
-from graphctx.embeddings import DeterministicEmbedder
-from graphctx.graph_traversal import bfs_graph_traversal, get_episodes_for_entities
-from graphctx.retriever import RecallEngine
-from graphctx.storage import SQLiteStore
+from palimp.embeddings import DeterministicEmbedder
+from palimp.graph_traversal import bfs_graph_traversal, get_episodes_for_entities
+from palimp.retriever import RecallEngine
+from palimp.storage import SQLiteStore
 
 
 def _make_engine(store: SQLiteStore) -> RecallEngine:
@@ -230,7 +229,7 @@ class TestMultiHopRecall:
         )
 
     def test_3hop_with_env(self, memory_store: SQLiteStore) -> None:
-        """With GRAPHCTX_GRAPH_MAX_HOPS=3, a 3-hop path A->B->C->D works."""
+        """With PALIMP_GRAPH_MAX_HOPS=3, a 3-hop path A->B->C->D works."""
         ns = "test"
         store = memory_store
 
@@ -255,8 +254,8 @@ class TestMultiHopRecall:
             store.insert_edge(ns, ent_ids[i], ent_ids[i + 1], "related")
 
         # Set max_hops=3 via env
-        with patch.dict(os.environ, {"GRAPHCTX_GRAPH_MAX_HOPS": "3"}):
-            from graphctx.config import get_config
+        with patch.dict(os.environ, {"PALIMP_GRAPH_MAX_HOPS": "3"}):
+            from palimp.config import get_config
             config = get_config()
             engine = RecallEngine(store, DeterministicEmbedder(), config=config)
             output = engine.recall(ns, "Alice", mode="hybrid", limit=8, explain=True)
@@ -297,7 +296,7 @@ class TestMultiHopRecall:
         result_ids = [r.id for r in output.results]
         # With default max_hops=2, eps_ids[3] (hop 3) should NOT be reachable
         assert eps_ids[3] not in result_ids, (
-            f"3-hop episode should NOT be reachable with default max_hops=2"
+            "3-hop episode should NOT be reachable with default max_hops=2"
         )
 
     def test_cycle_protection(self, memory_store: SQLiteStore) -> None:
@@ -413,8 +412,8 @@ class TestMultiHopRecall:
             leaf_eps_ids.append(eps)
 
         # Set max_expansions=2
-        with patch.dict(os.environ, {"GRAPHCTX_GRAPH_MAX_EXPANSIONS": "2"}):
-            from graphctx.config import get_config
+        with patch.dict(os.environ, {"PALIMP_GRAPH_MAX_EXPANSIONS": "2"}):
+            from palimp.config import get_config
             config = get_config()
             engine = RecallEngine(store, DeterministicEmbedder(), config=config)
             output = engine.recall(ns, "Center", mode="hybrid", limit=20, explain=True)
@@ -504,7 +503,7 @@ class TestMultiHopRecall:
         assert output.explanation.hop_count == 0
 
     def test_custom_depth_decay(self, memory_store: SQLiteStore) -> None:
-        """Custom GRAPHCTX_GRAPH_DEPTH_DECAY is applied."""
+        """Custom PALIMP_GRAPH_DEPTH_DECAY is applied."""
         ns = "test"
         store = memory_store
 
@@ -524,8 +523,8 @@ class TestMultiHopRecall:
         store.insert_edge(ns, ent_b, ent_c, "uses")
 
         # Use a very steep decay so hop-2 score is much lower
-        with patch.dict(os.environ, {"GRAPHCTX_GRAPH_DEPTH_DECAY": "0.3"}):
-            from graphctx.config import get_config
+        with patch.dict(os.environ, {"PALIMP_GRAPH_DEPTH_DECAY": "0.3"}):
+            from palimp.config import get_config
             config = get_config()
             assert config.depth_decay == 0.3
             engine = RecallEngine(store, DeterministicEmbedder(), config=config)

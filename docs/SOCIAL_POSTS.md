@@ -1,11 +1,11 @@
-# GraphCtx v0.3 — Social Media Posts
+# Palimp v0.3 — Social Media Posts
 
 ## Twitter Thread (7 tweets)
 
 ### Tweet 1 — Hook
 
 ```
-I built GraphCtx v0.3 — a local-first context graph for coding agents.
+I built Palimp v0.3 — a local-first context graph for coding agents.
 
 It makes your agent remember like an experienced teammate:
 • project gotchas
@@ -35,10 +35,10 @@ None of them know that a fact from 2022 is different from a fact from 2026.
 ### Tweet 3 — Multi-Hop + Temporal
 
 ```
-GraphCtx v0.3 adds multi-hop graph traversal.
+Palimp v0.3 adds multi-hop graph traversal.
 
 Your agent can now follow relationships:
-Alice → works_on → GraphCtx → uses → SQLite
+Alice → works_on → Palimp → uses → SQLite
 
 Ask "what does Alice's project use?" and it finds SQLite through 2 hops.
 
@@ -65,8 +65,8 @@ Critical memories survive context compression. Operational noise gets filtered.
 ```
 The killer feature: coding-agent runbook mode.
 
-graphctx runbook add --kind gotcha --content "pytest requires :memory: for isolated tests"
-graphctx runbook pack --task "fix failing storage tests" --budget 2000
+palimp runbook add --kind gotcha --content "pytest requires :memory: for isolated tests"
+palimp runbook pack --task "fix failing storage tests" --budget 2000
 
 Your agent gets a compact evidence pack with:
 • source-linked facts
@@ -89,14 +89,14 @@ Stack:
 • Zero paid LLM dependencies for tests
 • Deterministic embeddings (SHA-256 based)
 
-pip install graphctx
-graphctx init-agent --client claude
+pip install palimp
+palimp init-agent --client claude
 ```
 
 ### Tweet 7 — CTA
 
 ```
-GraphCtx is not the biggest memory system.
+Palimp is not the biggest memory system.
 
 It is the smallest useful local context graph for coding agents that need:
 • source-linked project memory
@@ -105,7 +105,7 @@ It is the smallest useful local context graph for coding agents that need:
 • multi-hop graph recall
 • MCP-safe context packs
 
-⭐ Star: github.com/Heman10x-NGU/graphctx
+⭐ Star: github.com/Heman10x-NGU/palimp
 🐛 Issues welcome
 🤝 PRs especially welcome
 
@@ -117,13 +117,13 @@ If you build agents and want them to remember like a teammate — try it.
 ## LinkedIn Post
 
 ```
-🚀 GraphCtx v0.3 — Local Context Graph for Coding Agents
+🚀 Palimp v0.3 — Local Context Graph for Coding Agents
 
-I've been building GraphCtx, an open-source local-first context graph that makes coding agents remember like an experienced teammate.
+I've been building Palimp, an open-source local-first context graph that makes coding agents remember like an experienced teammate.
 
 The problem: Every time you start a new coding session, your agent forgets everything. Your preferences, architecture decisions, project conventions — gone.
 
-The solution: GraphCtx gives agents persistent memory with:
+The solution: Palimp gives agents persistent memory with:
 
 ✅ Multi-hop graph traversal (follow relationships across entities)
 ✅ Temporal truth (current vs historical facts with validity windows)
@@ -140,12 +140,12 @@ What makes it different:
 • Works with Claude, Cursor, Codex, any MCP-compatible agent
 • MIT licensed, local-first, no vendor lock-in
 
-The key insight: Most memory tools help agents "remember more." GraphCtx helps agents "remember safely" — with provenance, namespace isolation, and temporal validity.
+The key insight: Most memory tools help agents "remember more." Palimp helps agents "remember safely" — with provenance, namespace isolation, and temporal validity.
 
-pip install graphctx
-graphctx init-agent --client claude
+pip install palimp
+palimp init-agent --client claude
 
-Try it: github.com/Heman10x-NGU/graphctx
+Try it: github.com/Heman10x-NGU/palimp
 
 #AI #OpenSource #CodingAgents #MCP #SQLite #GraphDatabase #DeveloperTools
 ```
@@ -155,9 +155,9 @@ Try it: github.com/Heman10x-NGU/graphctx
 ## Reddit Post (r/MachineLearning or r/LocalLLaMA)
 
 ```
-Title: GraphCtx v0.3 — Local SQLite context graph for coding agents (378 tests, MIT licensed)
+Title: Palimp v0.3 — Local SQLite context graph for coding agents (378 tests, MIT licensed)
 
-I built GraphCtx, an open-source local-first context graph for coding agents.
+I built Palimp, an open-source local-first context graph for coding agents.
 
 Key features:
 - Multi-hop graph traversal (2-3 hops with depth decay)
@@ -171,10 +171,10 @@ Key features:
 
 It's designed for developers who want their coding agent to remember project gotchas, commands that failed, fixes that worked, and architectural decisions — all with full provenance and temporal truth.
 
-pip install graphctx
-graphctx init-agent --client claude
+pip install palimp
+palimp init-agent --client claude
 
-GitHub: https://github.com/Heman10x-NGU/graphctx
+GitHub: https://github.com/Heman10x-NGU/palimp
 
 Not trying to be the biggest memory system. Just the smallest useful one for coding agents that care about source-linked memory and MCP safety.
 ```

@@ -1,16 +1,16 @@
-"""GraphCtx CLI — Typer app for memory, knowledge, recall, and diagnostics."""
+"""Palimp CLI — Typer app for memory, knowledge, recall, and diagnostics."""
 
 from __future__ import annotations
 
 import json
 import os
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 
-from graphctx.validate import ValidationError, validate_content, validate_namespace
+from palimp.validate import ValidationError, validate_content, validate_namespace
 
-app = typer.Typer(help="GraphCtx — local context graph for AI agents.")
+app = typer.Typer(help="Palimp — local context graph for AI agents.")
 
 # ---------------------------------------------------------------------------
 # serve
@@ -20,17 +20,17 @@ app = typer.Typer(help="GraphCtx — local context graph for AI agents.")
 @app.command()
 def serve(
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
     port: int = typer.Option(8420, help="Port for the HTTP server."),
 ) -> None:
-    """Start the GraphCtx REST + MCP server."""
+    """Start the Palimp REST + MCP server."""
     import uvicorn
 
     resolved = os.path.expanduser(db)
-    os.environ["GRAPHCTX_DB"] = resolved
-    typer.echo(f"Starting GraphCtx server on port {port} (db: {resolved})")
-    uvicorn.run("graphctx.server:app", host="0.0.0.0", port=port, log_level="info")
+    os.environ["PALIMP_DB"] = resolved
+    typer.echo(f"Starting Palimp server on port {port} (db: {resolved})")
+    uvicorn.run("palimp.server:app", host="0.0.0.0", port=port, log_level="info")
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ def memory_batch(
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     file: str = typer.Option(..., "--file", "-f", help="Path to JSON lines file (one memory JSON object per line)."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Batch insert memories from a JSON lines file.
@@ -60,7 +60,7 @@ def memory_batch(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -93,11 +93,11 @@ def memory_add(
         None, "--source-ref", "-s", help="Source reference."
     ),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Add a memory to the context graph."""
-    from graphctx.models import MEMORY_CATEGORIES
+    from palimp.models import MEMORY_CATEGORIES
 
     if category not in MEMORY_CATEGORIES:
         typer.echo(f"Error: invalid category '{category}'. Choose from: {', '.join(MEMORY_CATEGORIES)}", err=True)
@@ -110,10 +110,10 @@ def memory_add(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.embeddings import DeterministicEmbedder
-    from graphctx.extractor import RuleBasedExtractor
-    from graphctx.ingest import ingest_memory
-    from graphctx.storage import SQLiteStore
+    from palimp.embeddings import DeterministicEmbedder
+    from palimp.extractor import RuleBasedExtractor
+    from palimp.ingest import ingest_memory
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -148,7 +148,7 @@ def knowledge_batch(
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     file: str = typer.Option(..., "--file", "-f", help="Path to JSON lines file (one knowledge JSON object per line)."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Batch insert knowledge items from a JSON lines file.
@@ -162,7 +162,7 @@ def knowledge_batch(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -201,11 +201,11 @@ def knowledge_add(
         None, "--source-ref", "-s", help="Source reference."
     ),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Add a knowledge document to the context graph."""
-    from graphctx.models import MEMORY_CATEGORIES
+    from palimp.models import MEMORY_CATEGORIES
 
     if category not in MEMORY_CATEGORIES:
         typer.echo(f"Error: invalid category '{category}'. Choose from: {', '.join(MEMORY_CATEGORIES)}", err=True)
@@ -233,10 +233,10 @@ def knowledge_add(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.embeddings import DeterministicEmbedder
-    from graphctx.extractor import RuleBasedExtractor
-    from graphctx.ingest import ingest_knowledge
-    from graphctx.storage import SQLiteStore
+    from palimp.embeddings import DeterministicEmbedder
+    from palimp.extractor import RuleBasedExtractor
+    from palimp.ingest import ingest_knowledge
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -274,7 +274,7 @@ def entity_merge(
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     reason: str = typer.Option("", "--reason", "-r", help="Reason for the merge."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Merge entity B into entity A: move edges, claims, provenance, then tombstone B."""
@@ -284,7 +284,7 @@ def entity_merge(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -323,7 +323,7 @@ def trigger_add(
     term: str = typer.Option(..., "--term", "-t", help="Trigger term."),
     memory_id: str = typer.Option(..., "--memory-id", "-m", help="Memory ID to link."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Add a trigger term linked to a memory."""
@@ -333,7 +333,7 @@ def trigger_add(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -347,7 +347,7 @@ def trigger_add(
 def trigger_list(
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """List trigger terms for a namespace."""
@@ -357,7 +357,7 @@ def trigger_list(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -374,7 +374,7 @@ def trigger_delete(
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     term: str = typer.Option(..., "--term", "-t", help="Trigger term to delete."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Delete a trigger term by name."""
@@ -384,7 +384,7 @@ def trigger_delete(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -424,7 +424,7 @@ def runbook_add(
     ),
     confidence: float = typer.Option(1.0, "--confidence", help="Confidence 0-1."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Add a runbook entry (gotcha, workflow, command_fix, etc.)."""
@@ -442,7 +442,7 @@ def runbook_add(
         )
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -458,7 +458,7 @@ def runbook_list(
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     kind: Optional[str] = typer.Option(None, "--kind", "-k", help="Filter by kind."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """List runbook entries for a namespace."""
@@ -468,7 +468,7 @@ def runbook_list(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -487,7 +487,7 @@ def runbook_delete(
     runbook_id: str = typer.Argument(help="Runbook entry ID to delete."),
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Delete a runbook entry by ID."""
@@ -497,7 +497,7 @@ def runbook_delete(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -520,8 +520,8 @@ def _build_context_pack(
     Queries memories + knowledge + runbook entries relevant to the task,
     applies token budget, and returns a structured pack.
     """
-    from graphctx.embeddings import DeterministicEmbedder
-    from graphctx.retriever import RecallEngine
+    from palimp.embeddings import DeterministicEmbedder
+    from palimp.retriever import RecallEngine
 
     embedder = DeterministicEmbedder()
     engine = RecallEngine(store=store, embedder=embedder)
@@ -592,7 +592,7 @@ def runbook_pack(
     budget: int = typer.Option(2000, "--budget", "-b", help="Token budget."),
     json_output: bool = typer.Option(False, "--json", help="Output JSON."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Build a compact evidence pack for a coding task."""
@@ -602,7 +602,7 @@ def runbook_pack(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -641,7 +641,7 @@ def hook_preprompt(
     budget: int = typer.Option(2000, "--budget", "-b", help="Token budget."),
     json_output: bool = typer.Option(False, "--json", help="Output JSON."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Generate a preprompt context pack for an agent task.
@@ -655,7 +655,7 @@ def hook_preprompt(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -698,7 +698,7 @@ def recall(
         "auto", "--temporal-mode", help="Temporal filtering: auto, current, historical, all."
     ),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Recall memories and knowledge matching a query."""
@@ -708,9 +708,9 @@ def recall(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.embeddings import DeterministicEmbedder
-    from graphctx.retriever import RecallEngine
-    from graphctx.storage import SQLiteStore
+    from palimp.embeddings import DeterministicEmbedder
+    from palimp.retriever import RecallEngine
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -752,7 +752,7 @@ def recall(
 
         # Explain mode: print detailed breakdown
         if explain and r.score_breakdown:
-            typer.echo(f"  --- Score Breakdown ---")
+            typer.echo("  --- Score Breakdown ---")
             typer.echo(f"    lexical:     {r.score_breakdown.lexical:.4f}")
             typer.echo(f"    vector:      {r.score_breakdown.vector:.4f}")
             typer.echo(f"    graph_boost: {r.score_breakdown.graph_boost:.4f}")
@@ -783,17 +783,17 @@ def context(
     entity_id: str = typer.Argument(help="Entity ID to inspect."),
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Inspect an entity and its claims, edges, and provenance."""
     try:
-        ns = validate_namespace(namespace)
+        validate_namespace(namespace)
     except ValidationError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -831,7 +831,7 @@ def context(
 def stats(
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Print counts for a namespace."""
@@ -841,7 +841,7 @@ def stats(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -878,18 +878,17 @@ _REQUIRED_TABLES = {
 @app.command()
 def doctor(
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Run integrity and health checks on the database."""
-    import sqlite3
 
     resolved = os.path.expanduser(db)
     if not os.path.exists(resolved):
         typer.echo(f"Database not found: {resolved}")
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     store = SQLiteStore(resolved)
     conn = store._conn()
@@ -955,7 +954,7 @@ def pin(
     episode_id: str = typer.Argument(help="Episode ID to pin."),
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Pin an episode so it never decays."""
@@ -965,7 +964,7 @@ def pin(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -978,7 +977,7 @@ def unpin(
     episode_id: str = typer.Argument(help="Episode ID to unpin."),
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Unpin an episode so it resumes normal decay."""
@@ -988,7 +987,7 @@ def unpin(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.storage import SQLiteStore
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -1000,7 +999,7 @@ def unpin(
 def decay(
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Run a decay pass: archive episodes with very low retention."""
@@ -1010,8 +1009,8 @@ def decay(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    from graphctx.decay import compute_decay_score
-    from graphctx.storage import SQLiteStore
+    from palimp.decay import compute_decay_score
+    from palimp.storage import SQLiteStore
 
     resolved = os.path.expanduser(db)
     store = SQLiteStore(resolved)
@@ -1045,38 +1044,38 @@ def decay(
 _MCP_CONFIGS: dict[str, dict] = {
     "claude": {
         "mcpServers": {
-            "graphctx": {
-                "command": "graphctx",
+            "palimp": {
+                "command": "palimp",
                 "args": ["serve", "--port", "8420"],
             }
         }
     },
     "cursor": {
         "mcpServers": {
-            "graphctx": {
-                "command": "graphctx",
+            "palimp": {
+                "command": "palimp",
                 "args": ["serve", "--port", "8420"],
                 "env": {
-                    "GRAPHCTX_DB": "~/.graphctx/graphctx.db",
+                    "PALIMP_DB": "~/.palimp/palimp.db",
                 },
             }
         }
     },
     "codex": {
         "mcpServers": {
-            "graphctx": {
-                "command": "graphctx",
+            "palimp": {
+                "command": "palimp",
                 "args": ["serve", "--port", "8420"],
                 "env": {
-                    "GRAPHCTX_DB": "~/.graphctx/graphctx.db",
+                    "PALIMP_DB": "~/.palimp/palimp.db",
                 },
             }
         }
     },
     "generic": {
         "mcpServers": {
-            "graphctx": {
-                "command": "graphctx",
+            "palimp": {
+                "command": "palimp",
                 "args": ["serve"],
             }
         }
@@ -1084,19 +1083,19 @@ _MCP_CONFIGS: dict[str, dict] = {
 }
 
 _STARTER_MEMORY = (
-    "This agent uses GraphCtx for persistent context. "
+    "This agent uses Palimp for persistent context. "
     "Memories are namespace-scoped and provenance-aware."
 )
 
-_STARTER_KNOWLEDGE_TITLE = "GraphCtx Quick Reference"
+_STARTER_KNOWLEDGE_TITLE = "Palimp Quick Reference"
 _STARTER_KNOWLEDGE_CONTENT = (
-    "GraphCtx is a local context graph for AI agents. Key commands:\n"
-    "- graphctx memory add: Add a memory\n"
-    "- graphctx knowledge add: Add knowledge\n"
-    "- graphctx recall: Query context\n"
-    "- graphctx stats: Show namespace statistics\n"
-    "- graphctx doctor: Run integrity checks\n"
-    "- graphctx serve: Start REST+MCP server"
+    "Palimp is a local context graph for AI agents. Key commands:\n"
+    "- palimp memory add: Add a memory\n"
+    "- palimp knowledge add: Add knowledge\n"
+    "- palimp recall: Query context\n"
+    "- palimp stats: Show namespace statistics\n"
+    "- palimp doctor: Run integrity checks\n"
+    "- palimp serve: Start REST+MCP server"
 )
 
 
@@ -1104,7 +1103,7 @@ _STARTER_KNOWLEDGE_CONTENT = (
 def init_agent(
     namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
     client: str = typer.Option(
         "generic",
@@ -1131,10 +1130,10 @@ def init_agent(
     resolved = os.path.expanduser(db)
     os.makedirs(os.path.dirname(resolved) or ".", exist_ok=True)
 
-    from graphctx.embeddings import DeterministicEmbedder
-    from graphctx.extractor import RuleBasedExtractor
-    from graphctx.ingest import ingest_knowledge, ingest_memory
-    from graphctx.storage import SQLiteStore
+    from palimp.embeddings import DeterministicEmbedder
+    from palimp.extractor import RuleBasedExtractor
+    from palimp.ingest import ingest_knowledge, ingest_memory
+    from palimp.storage import SQLiteStore
 
     store = SQLiteStore(resolved)
     embedder = DeterministicEmbedder()
@@ -1182,7 +1181,7 @@ def init_agent(
     typer.echo("curl http://localhost:8420/v1/health")
 
     # Print first recall command
-    typer.echo(f'\ngraphctx recall "GraphCtx" --namespace {ns}')
+    typer.echo(f'\npalimp recall "Palimp" --namespace {ns}')
 
 
 # ---------------------------------------------------------------------------
@@ -1207,7 +1206,7 @@ def import_files(
         _DEFAULT_MAX_BYTES, "--max-bytes", help="Skip files larger than this (bytes)."
     ),
     db: str = typer.Option(
-        "~/.graphctx/graphctx.db", help="Path to SQLite database."
+        "~/.palimp/palimp.db", help="Path to SQLite database."
     ),
 ) -> None:
     """Import files as knowledge items into the context graph."""
@@ -1252,10 +1251,10 @@ def import_files(
     resolved = os.path.expanduser(db)
     os.makedirs(os.path.dirname(resolved) or ".", exist_ok=True)
 
-    from graphctx.embeddings import DeterministicEmbedder
-    from graphctx.extractor import RuleBasedExtractor
-    from graphctx.ingest import ingest_knowledge
-    from graphctx.storage import SQLiteStore
+    from palimp.embeddings import DeterministicEmbedder
+    from palimp.extractor import RuleBasedExtractor
+    from palimp.ingest import ingest_knowledge
+    from palimp.storage import SQLiteStore
 
     store = SQLiteStore(resolved)
     embedder = DeterministicEmbedder()
@@ -1326,11 +1325,11 @@ def benchmark(
     queries: int = typer.Option(100, "--queries", "-q", help="Number of recall queries per mode."),
     json_output: bool = typer.Option(False, "--json", help="Output JSON instead of table."),
     db: str = typer.Option(
-        "/tmp/graphctx_bench.db", help="Path to temporary SQLite database."
+        "/tmp/palimp_bench.db", help="Path to temporary SQLite database."
     ),
 ) -> None:
     """Run ingest and recall benchmarks with synthetic data."""
-    from graphctx.benchmark import run_benchmark
+    from palimp.benchmark import run_benchmark
 
     resolved = os.path.expanduser(db)
     results = run_benchmark(ns=namespace, items=items, queries=queries, db_path=resolved)
@@ -1341,7 +1340,7 @@ def benchmark(
 
     # Human-readable table
     typer.echo(f"{'=' * 60}")
-    typer.echo(f"  GraphCtx Benchmark Results")
+    typer.echo("  Palimp Benchmark Results")
     typer.echo(f"{'=' * 60}")
     typer.echo(f"  Namespace:        {results['namespace']}")
     typer.echo(f"  Items ingested:   {results['items_ingested']}")
@@ -1349,7 +1348,7 @@ def benchmark(
     typer.echo(f"{'=' * 60}")
 
     ing = results["ingest"]
-    typer.echo(f"\n  Ingest")
+    typer.echo("\n  Ingest")
     typer.echo(f"    Total time:     {ing['total_ms']:.1f} ms")
     typer.echo(f"    Items/sec:      {ing['items_per_sec']:.1f}")
 
@@ -1362,12 +1361,12 @@ def benchmark(
         typer.echo(f"    avg results:    {m['avg_result_count']:.1f}")
 
     db_info = results["db"]
-    typer.echo(f"\n  Database")
+    typer.echo("\n  Database")
     typer.echo(f"    Size:           {db_info['size_bytes']:,} bytes")
     typer.echo(f"    Embeddings:     {db_info['embedding_count']}")
 
     ts = results["tombstoned_exclusion"]
-    typer.echo(f"\n  Tombstoned Exclusion")
+    typer.echo("\n  Tombstoned Exclusion")
     typer.echo(f"    Found before:   {ts['found_before_tombstone']}")
     typer.echo(f"    Found after:    {ts['found_after_tombstone']}")
     typer.echo(f"    Excluded:       {ts['excluded']}")
@@ -1375,14 +1374,14 @@ def benchmark(
     # v3 config
     v3 = results.get("v3_config", {})
     if v3:
-        typer.echo(f"\n  V3 Config")
+        typer.echo("\n  V3 Config")
         typer.echo(f"    Graph max hops:       {v3.get('graph_max_hops', '?')}")
         typer.echo(f"    Temporal filter:      {v3.get('temporal_filter_enabled', '?')}")
         typer.echo(f"    Alias dedup:          {v3.get('alias_dedup_enabled', '?')}")
         typer.echo(f"    Reranker enabled:     {v3.get('reranker_enabled', '?')}")
         cat_dist = v3.get("category_distribution", {})
         if cat_dist:
-            typer.echo(f"    Category distribution:")
+            typer.echo("    Category distribution:")
             for cat, count in sorted(cat_dist.items()):
                 typer.echo(f"      {cat}: {count}")
 
@@ -1402,11 +1401,11 @@ def eval_mini(
     namespace: str = typer.Option("eval", "--namespace", "-n", help="Namespace."),
     json_output: bool = typer.Option(False, "--json", help="Output JSON."),
     db: str = typer.Option(
-        "/tmp/graphctx_eval.db", help="Path to temporary SQLite database."
+        "/tmp/palimp_eval.db", help="Path to temporary SQLite database."
     ),
 ) -> None:
     """Run the mini evaluation suite (15 categories)."""
-    from graphctx.eval import run_eval_mini
+    from palimp.eval import run_eval_mini
 
     resolved = os.path.expanduser(db)
     results = run_eval_mini(ns=namespace, db_path=resolved)
@@ -1418,7 +1417,7 @@ def eval_mini(
     # Human-readable output
     summary = results["summary"]
     typer.echo(f"{'=' * 60}")
-    typer.echo(f"  GraphCtx Mini Eval Results")
+    typer.echo("  Palimp Mini Eval Results")
     typer.echo(f"{'=' * 60}")
     typer.echo(f"  Passed: {summary['passed']}/{summary['total']}")
     typer.echo(f"{'=' * 60}")

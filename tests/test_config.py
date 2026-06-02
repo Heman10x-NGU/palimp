@@ -1,11 +1,10 @@
-"""Tests for graphctx.config — configurable search weights and settings."""
+"""Tests for palimp.config — configurable search weights and settings."""
 
 from __future__ import annotations
 
-import os
 import pytest
 
-from graphctx.config import GraphConfig, SearchWeights, get_config
+from palimp.config import GraphConfig, SearchWeights, get_config
 
 
 # ---------------------------------------------------------------------------
@@ -58,29 +57,29 @@ class TestDefaultWeights:
 
 
 class TestEnvOverride:
-    """Setting GRAPHCTX_WEIGHT_* env vars must override defaults."""
+    """Setting PALIMP_WEIGHT_* env vars must override defaults."""
 
     def test_env_override_lexical(self, monkeypatch):
-        monkeypatch.setenv("GRAPHCTX_WEIGHT_LEXICAL", "0.50")
+        monkeypatch.setenv("PALIMP_WEIGHT_LEXICAL", "0.50")
         w = SearchWeights()
         assert w.lexical == pytest.approx(0.50)
         # Others unchanged
         assert w.vector == pytest.approx(0.30)
 
     def test_env_override_vector(self, monkeypatch):
-        monkeypatch.setenv("GRAPHCTX_WEIGHT_VECTOR", "0.60")
+        monkeypatch.setenv("PALIMP_WEIGHT_VECTOR", "0.60")
         w = SearchWeights()
         assert w.vector == pytest.approx(0.60)
 
     def test_env_override_graph_config(self, monkeypatch):
-        monkeypatch.setenv("GRAPHCTX_GRAPH_MAX_HOPS", "3")
-        monkeypatch.setenv("GRAPHCTX_GRAPH_DEPTH_DECAY", "0.40")
+        monkeypatch.setenv("PALIMP_GRAPH_MAX_HOPS", "3")
+        monkeypatch.setenv("PALIMP_GRAPH_DEPTH_DECAY", "0.40")
         cfg = GraphConfig()
         assert cfg.max_hops == 3
         assert cfg.depth_decay == pytest.approx(0.40)
 
     def test_env_override_reranker(self, monkeypatch):
-        monkeypatch.setenv("GRAPHCTX_RERANKER_ENDPOINT", "http://localhost:9999")
+        monkeypatch.setenv("PALIMP_RERANKER_ENDPOINT", "http://localhost:9999")
         cfg = GraphConfig()
         assert cfg.reranker_endpoint == "http://localhost:9999"
 
@@ -94,22 +93,22 @@ class TestInvalidWeights:
     """Negative or non-numeric env values must raise ValueError."""
 
     def test_negative_weight_raises(self, monkeypatch):
-        monkeypatch.setenv("GRAPHCTX_WEIGHT_LEXICAL", "-0.10")
+        monkeypatch.setenv("PALIMP_WEIGHT_LEXICAL", "-0.10")
         with pytest.raises(ValueError, match="must be non-negative"):
             SearchWeights()
 
     def test_non_numeric_weight_raises(self, monkeypatch):
-        monkeypatch.setenv("GRAPHCTX_WEIGHT_LEXICAL", "abc")
+        monkeypatch.setenv("PALIMP_WEIGHT_LEXICAL", "abc")
         with pytest.raises(ValueError, match="Invalid"):
             SearchWeights()
 
     def test_negative_int_raises(self, monkeypatch):
-        monkeypatch.setenv("GRAPHCTX_GRAPH_MAX_HOPS", "-1")
+        monkeypatch.setenv("PALIMP_GRAPH_MAX_HOPS", "-1")
         with pytest.raises(ValueError, match="must be non-negative"):
             GraphConfig()
 
     def test_non_numeric_int_raises(self, monkeypatch):
-        monkeypatch.setenv("GRAPHCTX_GRAPH_MAX_HOPS", "xyz")
+        monkeypatch.setenv("PALIMP_GRAPH_MAX_HOPS", "xyz")
         with pytest.raises(ValueError, match="Invalid"):
             GraphConfig()
 
@@ -124,8 +123,8 @@ class TestWeightsInExplanation:
 
     def test_weights_in_explanation(self, memory_store):
         """explanation.scoring_config must match the configured weights."""
-        from graphctx.embeddings import DeterministicEmbedder
-        from graphctx.retriever import RecallEngine
+        from palimp.embeddings import DeterministicEmbedder
+        from palimp.retriever import RecallEngine
 
         embedder = DeterministicEmbedder()
         engine = RecallEngine(store=memory_store, embedder=embedder)
@@ -156,10 +155,10 @@ class TestWeightsInExplanation:
 
     def test_env_override_shows_in_explanation(self, memory_store, monkeypatch):
         """When env weights are changed, explanation reflects the new values."""
-        from graphctx.embeddings import DeterministicEmbedder
-        from graphctx.retriever import RecallEngine
+        from palimp.embeddings import DeterministicEmbedder
+        from palimp.retriever import RecallEngine
 
-        monkeypatch.setenv("GRAPHCTX_WEIGHT_LEXICAL", "0.50")
+        monkeypatch.setenv("PALIMP_WEIGHT_LEXICAL", "0.50")
 
         embedder = DeterministicEmbedder()
         # Config is created fresh per RecallEngine instantiation

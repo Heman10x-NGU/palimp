@@ -1,4 +1,4 @@
-"""GraphCtx eval mini command implementation.
+"""Palimp eval mini command implementation.
 
 Local mini-eval for verifying basic retrieval correctness across 15 categories.
 This is NOT LongMemEval/LoCoMo -- it is a lightweight sanity check.
@@ -9,10 +9,10 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from graphctx.embeddings import DeterministicEmbedder
-from graphctx.ingest import ingest_memory, ingest_knowledge
-from graphctx.retriever import RecallEngine
-from graphctx.storage import SQLiteStore
+from palimp.embeddings import DeterministicEmbedder
+from palimp.ingest import ingest_memory, ingest_knowledge
+from palimp.retriever import RecallEngine
+from palimp.storage import SQLiteStore
 
 
 # ---------------------------------------------------------------------------
@@ -113,13 +113,13 @@ def _eval_static_knowledge(
         embedder=engine._embedder,
         extractor=None,
         ns=ns,
-        title="GraphCtx Storage",
-        content="GraphCtx uses SQLite for persistent storage with FTS5 full-text search",
+        title="Palimp Storage",
+        content="Palimp uses SQLite for persistent storage with FTS5 full-text search",
         extract=False,
     )
     target_episode_id = result["episode_id"]
 
-    output = engine.recall(ns=ns, query="What storage does GraphCtx use?", mode="hybrid", limit=5)
+    output = engine.recall(ns=ns, query="What storage does Palimp use?", mode="hybrid", limit=5)
     retrieved_ids = [r.id for r in output.results]
     top_score = output.results[0].score if output.results else 0.0
 
@@ -127,7 +127,7 @@ def _eval_static_knowledge(
     return {
         "category": "static_knowledge",
         "pass": passed,
-        "expected": "GraphCtx uses SQLite for persistent storage",
+        "expected": "Palimp uses SQLite for persistent storage",
         "retrieved_ids": retrieved_ids[:3],
         "top_score": top_score,
         "notes": "" if passed else "Storage knowledge not found in recall results",
@@ -140,7 +140,7 @@ def _eval_temporal_current(
     ns: str,
 ) -> dict[str, Any]:
     """Insert current and historical facts, query for current."""
-    historical = ingest_memory(
+    ingest_memory(
         store=store,
         embedder=engine._embedder,
         extractor=None,
@@ -358,25 +358,25 @@ def _eval_multi_hop_2hop(
 ) -> dict[str, Any]:
     """A -> B -> C chain: query about A retrieves C via graph traversal.
 
-    Entity chain: Alice --works_on--> GraphCtx --uses--> SQLite --supports--> FTS5
+    Entity chain: Alice --works_on--> Palimp --uses--> SQLite --supports--> FTS5
     Query: "What search does Alice's project support?" -> should find FTS5 episode.
     """
     chain = [
         {
-            "content": "Alice is the lead developer of the GraphCtx project",
+            "content": "Alice is the lead developer of the Palimp project",
             "entities": [
                 {"name": "Alice", "type": "Person"},
-                {"name": "GraphCtx", "type": "Project"},
+                {"name": "Palimp", "type": "Project"},
             ],
-            "edges": [{"source": "Alice", "target": "GraphCtx", "relation": "works_on"}],
+            "edges": [{"source": "Alice", "target": "Palimp", "relation": "works_on"}],
         },
         {
-            "content": "GraphCtx uses SQLite for its storage backend",
+            "content": "Palimp uses SQLite for its storage backend",
             "entities": [
-                {"name": "GraphCtx", "type": "Project"},
+                {"name": "Palimp", "type": "Project"},
                 {"name": "SQLite", "type": "Technology"},
             ],
-            "edges": [{"source": "GraphCtx", "target": "SQLite", "relation": "uses"}],
+            "edges": [{"source": "Palimp", "target": "SQLite", "relation": "uses"}],
         },
         {
             "content": "SQLite supports FTS5 full-text search indexing",
@@ -414,36 +414,36 @@ def _eval_multi_hop_3hop(
     engine: RecallEngine,
     ns: str,
 ) -> dict[str, Any]:
-    """A -> B -> C -> D chain with GRAPHCTX_GRAPH_MAX_HOPS=3.
+    """A -> B -> C -> D chain with PALIMP_GRAPH_MAX_HOPS=3.
 
-    Chain: Bob --uses--> GraphCtx --depends_on--> SQLite --uses--> WAL_journaling
+    Chain: Bob --uses--> Palimp --depends_on--> SQLite --uses--> WAL_journaling
     Query: "What journaling does Bob's tool use?" -> should find WAL_journaling episode.
-    Requires max_hops=3 to traverse Bob -> GraphCtx -> SQLite -> WAL_journaling.
+    Requires max_hops=3 to traverse Bob -> Palimp -> SQLite -> WAL_journaling.
     """
     # Temporarily set max hops to 3
-    old_hops = os.environ.get("GRAPHCTX_GRAPH_MAX_HOPS")
-    os.environ["GRAPHCTX_GRAPH_MAX_HOPS"] = "3"
+    old_hops = os.environ.get("PALIMP_GRAPH_MAX_HOPS")
+    os.environ["PALIMP_GRAPH_MAX_HOPS"] = "3"
     try:
-        from graphctx.config import get_config
+        from palimp.config import get_config
         config_3hop = get_config()
         engine_3hop = RecallEngine(store=store, embedder=engine._embedder, config=config_3hop)
 
         chain = [
             {
-                "content": "Bob uses GraphCtx as his primary coding agent memory",
+                "content": "Bob uses Palimp as his primary coding agent memory",
                 "entities": [
                     {"name": "Bob", "type": "Person"},
-                    {"name": "GraphCtx", "type": "Project"},
+                    {"name": "Palimp", "type": "Project"},
                 ],
-                "edges": [{"source": "Bob", "target": "GraphCtx", "relation": "uses"}],
+                "edges": [{"source": "Bob", "target": "Palimp", "relation": "uses"}],
             },
             {
-                "content": "GraphCtx depends on SQLite as its database engine",
+                "content": "Palimp depends on SQLite as its database engine",
                 "entities": [
-                    {"name": "GraphCtx", "type": "Project"},
+                    {"name": "Palimp", "type": "Project"},
                     {"name": "SQLite", "type": "Technology"},
                 ],
-                "edges": [{"source": "GraphCtx", "target": "SQLite", "relation": "depends_on"}],
+                "edges": [{"source": "Palimp", "target": "SQLite", "relation": "depends_on"}],
             },
             {
                 "content": "SQLite uses WAL journaling mode for concurrent reads",
@@ -476,9 +476,9 @@ def _eval_multi_hop_3hop(
         }
     finally:
         if old_hops is not None:
-            os.environ["GRAPHCTX_GRAPH_MAX_HOPS"] = old_hops
+            os.environ["PALIMP_GRAPH_MAX_HOPS"] = old_hops
         else:
-            os.environ.pop("GRAPHCTX_GRAPH_MAX_HOPS", None)
+            os.environ.pop("PALIMP_GRAPH_MAX_HOPS", None)
 
 
 def _eval_alias_dedup(
@@ -519,7 +519,7 @@ def _eval_alias_dedup(
     same_entity = ent_id_1 == ent_id_2 == ent_id_3
 
     # Also verify via find_entity_by_alias
-    from graphctx.aliases import normalize_entity_name
+    from palimp.aliases import normalize_entity_name
     found = store.find_entity_by_alias(ns, normalize_entity_name("the Python"))
     resolves = found is not None and found["id"] == ent_id_1
 
@@ -556,7 +556,7 @@ def _eval_category_priority_under_budget(
     ingest_memory(
         store=store, embedder=engine._embedder, extractor=None,
         ns=budget_ns,
-        content="CRITICAL gotcha: pytest requires the test database to be in-memory, set GRAPHCTX_DB to memory mode",
+        content="CRITICAL gotcha: pytest requires the test database to be in-memory, set PALIMP_DB to memory mode",
         extract=False, category="gotcha",
     )
 
@@ -631,19 +631,19 @@ def _eval_runbook_gotcha_pack(
     store.insert_runbook(
         ns=ns,
         kind="gotcha",
-        content="pytest requires GRAPHCTX_DB=:memory: for isolated tests or DB locks will occur",
+        content="pytest requires PALIMP_DB=:memory: for isolated tests or DB locks will occur",
         source_ref="docs/testing.md",
         confidence=1.0,
     )
 
     # Build a context pack for a related task
-    from graphctx.cli import _build_context_pack
+    from palimp.cli import _build_context_pack
     pack = _build_context_pack(store=store, ns=ns, task="fix failing pytest tests", budget_tokens=2000)
 
     # Check that the gotcha is in the pack
     found_gotcha = False
     for item in pack["items"]:
-        if "GRAPHCTX_DB" in item.get("content", "") and item.get("kind") == "gotcha":
+        if "PALIMP_DB" in item.get("content", "") and item.get("kind") == "gotcha":
             found_gotcha = True
             break
 
@@ -747,7 +747,7 @@ def run_eval_mini(
     """
     if db_path is None:
         import tempfile
-        fd, db_path = tempfile.mkstemp(suffix=".db", prefix="graphctx_eval_")
+        fd, db_path = tempfile.mkstemp(suffix=".db", prefix="palimp_eval_")
         os.close(fd)
 
     # Clean up any existing file

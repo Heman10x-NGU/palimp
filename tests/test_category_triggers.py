@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from graphctx.embeddings import DeterministicEmbedder
-from graphctx.ingest import ingest_memory, ingest_knowledge
-from graphctx.models import CATEGORY_PRIORITY, MEMORY_CATEGORIES
-from graphctx.retriever import RecallEngine
-from graphctx.storage import SQLiteStore
+from palimp.embeddings import DeterministicEmbedder
+from palimp.ingest import ingest_memory, ingest_knowledge
+from palimp.models import CATEGORY_PRIORITY, MEMORY_CATEGORIES
+from palimp.retriever import RecallEngine
+from palimp.storage import SQLiteStore
 
 
 @pytest.fixture()
@@ -41,7 +41,7 @@ class TestCategoryOnMemory:
             embedder=embedder,
             extractor=None,
             ns="test",
-            content="pytest requires GRAPHCTX_DB=:memory: for isolated tests",
+            content="pytest requires PALIMP_DB=:memory: for isolated tests",
             category="gotcha",
         )
         memory_id = result["memory_id"]
@@ -116,7 +116,7 @@ class TestCategoryPrioritySurvivesBudget:
             embedder=embedder,
             extractor=None,
             ns="test",
-            content="pytest requires GRAPHCTX_DB=:memory: for isolated tests",
+            content="pytest requires PALIMP_DB=:memory: for isolated tests",
             category="gotcha",
         )
         ingest_memory(
@@ -229,7 +229,7 @@ class TestTriggerBoost:
             ns="test",
             content="Use pytest for testing Python applications",
         )
-        result2 = ingest_memory(
+        ingest_memory(
             store=store,
             embedder=embedder,
             extractor=None,
@@ -251,7 +251,7 @@ class TestTriggerBoost:
 
         assert len(output.results) >= 2
         # The triggered memory should score higher
-        top_result = output.results[0]
+        output.results[0]
         # The top result should be the one linked to the trigger
         # (or at least the triggered one should be in the results)
         episode_ids = [r.id for r in output.results]
@@ -273,7 +273,7 @@ class TestTriggerNamespaceScoped:
         store.insert_trigger(ns="ns1", term="pytest", memory_id=result1["memory_id"])
 
         # Add memory in ns2 without trigger
-        result2 = ingest_memory(
+        ingest_memory(
             store=store,
             embedder=embedder,
             extractor=None,

@@ -1,6 +1,6 @@
 # Temporal Validity
 
-GraphCtx tracks when facts are valid. Every memory and knowledge item carries `valid_from` and `valid_until` timestamps that control whether it appears in current, historical, or point-in-time queries.
+Palimp tracks when facts are valid. Every memory and knowledge item carries `valid_from` and `valid_until` timestamps that control whether it appears in current, historical, or point-in-time queries.
 
 ## Temporal States
 
@@ -31,14 +31,14 @@ Control how recall filters by time:
 
 ```bash
 # Current facts only (default)
-graphctx recall --namespace demo "where does Alice live?"
+palimp recall --namespace demo "where does Alice live?"
 
 # Historical facts
-graphctx recall --namespace demo "where did Alice live in 2022?" \
+palimp recall --namespace demo "where did Alice live in 2022?" \
   --temporal-mode historical
 
 # All facts regardless of time
-graphctx recall --namespace demo "Alice address" \
+palimp recall --namespace demo "Alice address" \
   --temporal-mode all
 ```
 
@@ -46,7 +46,7 @@ graphctx recall --namespace demo "Alice address" \
 
 ```bash
 # What was true on January 15, 2026?
-graphctx recall --namespace demo "project config" \
+palimp recall --namespace demo "project config" \
   --as-of 2026-01-15T00:00:00Z
 ```
 
@@ -55,7 +55,7 @@ The `as_of` parameter changes which facts are considered current at that point i
 ### Combine both
 
 ```bash
-graphctx recall --namespace demo "architecture decisions" \
+palimp recall --namespace demo "architecture decisions" \
   --as-of 2025-12-01T00:00:00Z \
   --temporal-mode historical
 ```
@@ -116,42 +116,42 @@ New fact:  "Alice lives in Portland"   valid_from  = 2026-03-01
 
 ```bash
 # Record the original config
-graphctx memory add --namespace myapp \
+palimp memory add --namespace myapp \
   --content "Build system uses Make" --valid-from 2025-01-01T00:00:00Z
 
 # Record the change
-graphctx memory add --namespace myapp \
+palimp memory add --namespace myapp \
   --content "Build system migrated to uv" --valid-from 2026-04-01T00:00:00Z
 
 # Current: returns "Build system migrated to uv"
-graphctx recall --namespace myapp "build system"
+palimp recall --namespace myapp "build system"
 
 # Historical: returns "Build system uses Make"
-graphctx recall --namespace myapp "build system" --temporal-mode historical
+palimp recall --namespace myapp "build system" --temporal-mode historical
 
 # Point-in-time: returns "Build system uses Make"
-graphctx recall --namespace myapp "build system" --as-of 2025-06-01T00:00:00Z
+palimp recall --namespace myapp "build system" --as-of 2025-06-01T00:00:00Z
 ```
 
 ### Command fix history
 
 ```bash
 # Old fix
-graphctx memory add --namespace myapp \
+palimp memory add --namespace myapp \
   --content "Fix import error: pip install -e ."
 
 # New fix
-graphctx memory add --namespace myapp \
+palimp memory add --namespace myapp \
   --content "Fix import error: uv sync --all-extras"
 
 # Historical recall finds both
-graphctx recall --namespace myapp "import error fix" --temporal-mode all
+palimp recall --namespace myapp "import error fix" --temporal-mode all
 ```
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `GRAPHCTX_WEIGHT_TEMPORAL` | `0.05` | Weight of temporal match in scoring |
+| `PALIMP_WEIGHT_TEMPORAL` | `0.05` | Weight of temporal match in scoring |
 
 Temporal scoring boosts facts whose temporal status matches the query mode (current for current queries, historical for historical queries).

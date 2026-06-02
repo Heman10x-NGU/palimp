@@ -1,4 +1,4 @@
-"""GraphCtx Pydantic models for API requests, responses, and internal records."""
+"""Palimp Pydantic models for API requests, responses, and internal records."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Ebbinghaus forgetting curve for GraphCtx episode decay.
+"""Ebbinghaus forgetting curve for Palimp episode decay.
 
 Retention model: R = e^(-t / S)
   t = days since last access

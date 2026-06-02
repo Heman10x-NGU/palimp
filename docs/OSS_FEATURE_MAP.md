@@ -1,19 +1,19 @@
 # OSS Feature Map
 
-This table tracks every open-source project that informed GraphCtx v0.3.0. Columns:
+This table tracks every open-source project that informed Palimp v0.3.0. Columns:
 
 - **Source** -- project name
 - **URL** -- canonical repository or site
 - **Local `_refs`** -- path in the local `_refs/` directory, if present
 - **License** -- license visible in the repository
 - **Best Feature** -- the single most valuable idea from that project
-- **GraphCtx Decision** -- what we did with it
+- **Palimp Decision** -- what we did with it
 - **Attribution Note** -- what was borrowed (concepts only, never code)
 - **Code Reuse** -- always `none` unless a future line explicitly says otherwise
 
 ## Feature Map Table
 
-| Source | URL | Local `_refs` | License | Best Feature | GraphCtx Decision | Attribution Note | Code Reuse |
+| Source | URL | Local `_refs` | License | Best Feature | Palimp Decision | Attribution Note | Code Reuse |
 |---|---|---|---|---|---|---|---|
 | AutoMem | https://github.com/verygoodplugins/automem | `_refs/automem` | MIT | 11 relationship taxonomy, 9-signal scoring, bridge discovery, LoCoMo/LongMemEval benchmark discipline | implemented | Relation enum, benchmark evaluation approach, and multi-hop bridge discovery inspired by AutoMem's typed-relationship model, scoring discipline, and bridge traversal | none |
 | MemoryOS | https://github.com/Per0x1de-1337/memoryos | `_refs/MemoryOS` | MIT | Temporal KG, Ebbinghaus decay, fast/thinking retrieval modes, query explanation traces | implemented | Temporal knowledge graph with append-only supersession and Ebbinghaus forgetting curve; retrieval mode naming (fast, thinking) and explanation traces | none |
@@ -30,7 +30,7 @@ This table tracks every open-source project that informed GraphCtx v0.3.0. Colum
 
 ## Decision Legend
 
-- **implemented** -- concept present in GraphCtx v0.3.0 (or earlier, carried forward)
+- **implemented** -- concept present in Palimp v0.3.0 (or earlier, carried forward)
 - **implement-v0.2** -- planned for v0.2.0 (UX ideas, onboarding, or API ergonomics)
 - **schema-hook** -- reserved for future schema extension points; no implementation yet
 - **v0.4** -- deferred to v0.4 (optional backends, advanced features)
@@ -38,4 +38,4 @@ This table tracks every open-source project that informed GraphCtx v0.3.0. Colum
 
 ## Attribution Rule
 
-GraphCtx reuses concepts, API ergonomics, and test ideas only -- not code -- unless a future line in this file explicitly says otherwise. See [ATTRIBUTIONS.md](ATTRIBUTIONS.md) for the full attribution statement.
+Palimp reuses concepts, API ergonomics, and test ideas only -- not code -- unless a future line in this file explicitly says otherwise. See [ATTRIBUTIONS.md](ATTRIBUTIONS.md) for the full attribution statement.

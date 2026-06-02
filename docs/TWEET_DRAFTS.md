@@ -1,4 +1,4 @@
-# GraphCtx — Alternate Tweet Hooks
+# Palimp — Alternate Tweet Hooks
 
 > Draft hooks for A/B testing or future tweets.
 > Each hook targets a different angle: problem, curiosity, technical, developer pain, contrarian.
@@ -11,7 +11,7 @@ Your AI agent remembers things. But can you see what it remembers? Can you trace
 
 Most agent memory tools say "yes." Most are lying.
 
-GraphCtx is different. Here's how 🧵
+Palimp is different. Here's how 🧵
 
 ---
 
@@ -29,7 +29,7 @@ But the real feature isn't the tech. It's what it prevents 🧵
 
 SQLite. WAL mode. FTS5. Numpy vectors. Pydantic models. FastAPI.
 
-That's the entire stack for GraphCtx — an open-source local context graph for AI agents.
+That's the entire stack for Palimp — an open-source local context graph for AI agents.
 
 No Neo4j. No Qdrant. No hosted API. No vendor lock-in.
 
@@ -41,7 +41,7 @@ Here's what it does and why it matters 🧵
 
 I tried Mem0. Hosted only. I tried Zep. Too complex. I tried raw vector stores. No graph, no provenance.
 
-So I built GraphCtx — a local-first context graph that runs in SQLite and exposes MCP tools.
+So I built Palimp — a local-first context graph that runs in SQLite and exposes MCP tools.
 
 Here's the full story 🧵
 
@@ -53,7 +53,7 @@ Hot take: most agent memory tools are solving the wrong problem.
 
 The issue isn't "how do agents remember more." It's "how do agents remember safely."
 
-GraphCtx tracks provenance, isolates namespaces, and returns data — not instructions.
+Palimp tracks provenance, isolates namespaces, and returns data — not instructions.
 
 Here's why that matters 🧵
 
@@ -61,11 +61,11 @@ Here's why that matters 🧵
 
 ## Hook F — Minimal
 
-`pip install graphctx`
+`pip install palimp`
 
 One command. Local SQLite. MCP-ready. Provenance on every result.
 
-GraphCtx is the open-source context graph for AI agents.
+Palimp is the open-source context graph for AI agents.
 
 Thread on why and how 🧵
 
@@ -77,7 +77,7 @@ HydraDB: hosted, managed, closed-source.
 Mem0: hosted, managed, open-core.
 Raw vector DBs: no graph, no provenance.
 
-GraphCtx: local, open-source, SQLite-first, provenance-aware.
+Palimp: local, open-source, SQLite-first, provenance-aware.
 
 The context graph you can actually inspect 🧵
 

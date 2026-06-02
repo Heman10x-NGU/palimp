@@ -9,16 +9,15 @@ Covers:
 - Strong vs weak agent preservation ratios
 """
 
-import pytest
 
-from graphctx.context_manager import (
+from palimp.context_manager import (
     ContextManager,
     ContextState,
     ManagedContext,
     _AGENT_TIER_BUDGET,
 )
-from graphctx.models import RecallResult
-from graphctx.storage import SQLiteStore
+from palimp.models import RecallResult
+from palimp.storage import SQLiteStore
 
 
 # ---------------------------------------------------------------------------

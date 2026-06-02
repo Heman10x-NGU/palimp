@@ -2,8 +2,8 @@
 
 import json
 
-from graphctx.aliases import entities_compatible, normalize_entity_name
-from graphctx.storage import SQLiteStore
+from palimp.aliases import entities_compatible, normalize_entity_name
+from palimp.storage import SQLiteStore
 
 
 # ---------------------------------------------------------------------------

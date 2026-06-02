@@ -1,4 +1,4 @@
-"""AdaCoM-inspired rule-based context manager for GraphCtx.
+"""AdaCoM-inspired rule-based context manager for Palimp.
 
 Implements structured context state tracking, memory deduplication,
 relevance scoring, and token-budget-aware compression.  Designed to
@@ -17,8 +17,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from graphctx.models import RecallResult
-from graphctx.storage import SQLiteStore
+from palimp.models import CATEGORY_PRIORITY, RecallResult
+from palimp.storage import SQLiteStore
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -410,17 +410,31 @@ class ContextManager:
         Token estimation: len(content) / 4.
         Budget = total_tokens * budget_ratio.
         Memories are assumed pre-sorted by relevance (best first).
+        High-priority categories (identity, constraint, gotcha) get a
+        category boost so they survive tighter budgets.
         """
         if not memories:
             return []
 
-        total_tokens = sum(len(m.content) // _CHARS_PER_TOKEN for m in memories)
+        # Apply category priority boost to scores for budget-aware sorting
+        boosted: list[tuple[RecallResult, float]] = []
+        for mem in memories:
+            cat_priority = CATEGORY_PRIORITY.get(mem.category, 0.2)
+            # Blend: 70% original score, 30% category priority
+            boosted_score = 0.7 * mem.score + 0.3 * cat_priority
+            boosted.append((mem, boosted_score))
+
+        # Re-sort by boosted score
+        boosted.sort(key=lambda x: x[1], reverse=True)
+        sorted_memories = [m for m, _ in boosted]
+
+        total_tokens = sum(len(m.content) // _CHARS_PER_TOKEN for m in sorted_memories)
         budget = max(1, int(total_tokens * budget_ratio))
 
         kept: list[RecallResult] = []
         used_tokens = 0
 
-        for mem in memories:
+        for mem in sorted_memories:
             mem_tokens = len(mem.content) // _CHARS_PER_TOKEN
             if used_tokens + mem_tokens <= budget:
                 kept.append(mem)

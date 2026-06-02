@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "graphctx"
+name = "palimp"
 version = "0.3.0"
-description = "Open-source local context graph for AI agents — memories, knowledge, recall, provenance, and MCP access in a SQLite-first package."
+description = "Palimp — layers of truth for AI agents. Local-first context graph with memories, knowledge, recall, provenance, and MCP access in a SQLite-first package."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -35,10 +35,10 @@ mcp = ["mcp>=1.0"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.1", "httpx"]
 
 [project.scripts]
-graphctx = "graphctx.cli:app"
+palimp = "palimp.cli:app"
 
 [tool.setuptools.packages.find]
-include = ["graphctx*"]
+include = ["palimp*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

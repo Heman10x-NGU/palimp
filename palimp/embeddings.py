@@ -1,4 +1,4 @@
-"""GraphCtx embedding layer.
+"""Palimp embedding layer.
 
 Provides a base embedder interface plus:
 - DeterministicEmbedder: hash-based, zero LLM dependency, for testing.
@@ -105,11 +105,14 @@ class HttpEmbedder(BaseEmbedder):
         """Send embedding request and return list of vectors."""
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self._api_key}",
         }
+        if self._api_key and self._api_key.strip():
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        # Truncate each text to 6000 characters to fit context limits (Ollama/API)
+        truncated_texts = [t[:6000] for t in texts]
         payload = {
             "model": self._model,
-            "input": texts,
+            "input": truncated_texts,
         }
         with httpx.Client(timeout=self._timeout) as client:
             resp = client.post(self._endpoint, json=payload, headers=headers)

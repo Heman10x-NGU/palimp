@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import struct
-from typing import Any, Optional
+from typing import Any
 
-from graphctx.embeddings import BaseEmbedder, DeterministicEmbedder
-from graphctx.extractor import BaseExtractor
-from graphctx.storage import SQLiteStore
-from graphctx.validate import validate_content, validate_namespace
+from palimp.embeddings import BaseEmbedder, DeterministicEmbedder
+from palimp.extractor import BaseExtractor
+from palimp.storage import SQLiteStore
+from palimp.validate import validate_content, validate_namespace
 
 _DETERMINISTIC_MODEL = "deterministic-sha256"
 
@@ -57,11 +57,12 @@ def _run_extraction(
 
     for ent in extraction.entities:
         try:
-            eid = store.insert_entity(
+            eid = store.insert_entity_with_alias(
                 ns=ns,
                 name=ent["name"],
                 entity_type=ent.get("type", "Entity"),
                 confidence=ent.get("confidence", 0.85),
+                source_episode_id=episode_id,
             )
             name_to_id[ent["name"]] = eid
             store.insert_provenance(
@@ -131,12 +132,13 @@ def ingest_memory(
     source_ref: str | None = None,
     metadata: dict[str, Any] | None = None,
     extract: bool = True,
+    category: str = "other",
 ) -> dict[str, Any]:
     """Ingest a memory: validate, store episode+memory, embed, extract."""
     ns = validate_namespace(ns)
     content = validate_content(content)
 
-    result = store.insert_memory(ns, content, source_ref, metadata)
+    result = store.insert_memory(ns, content, source_ref, metadata, category=category)
     episode_id = result["episode_id"]
 
     _store_embedding(store, embedder, ns, episode_id, content)
@@ -172,13 +174,14 @@ def ingest_knowledge(
     source_ref: str | None = None,
     metadata: dict[str, Any] | None = None,
     extract: bool = True,
+    category: str = "other",
 ) -> dict[str, Any]:
     """Ingest a knowledge item: validate, store, embed, extract."""
     ns = validate_namespace(ns)
     content = validate_content(content)
     title = validate_content(title, field="title")
 
-    result = store.insert_knowledge(ns, title, content, source_ref, metadata)
+    result = store.insert_knowledge(ns, title, content, source_ref, metadata, category=category)
     episode_id = result["episode_id"]
 
     _store_embedding(store, embedder, ns, episode_id, content)

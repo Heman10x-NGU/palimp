@@ -1,4 +1,4 @@
-"""GraphCtx retrieval / recall engine.
+"""Palimp retrieval / recall engine.
 
 Implements hybrid recall across memories and knowledge with:
 - FTS5 lexical search
@@ -18,25 +18,24 @@ import math
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from graphctx.config import GraphConfig, get_config
-from graphctx.decay import DEFAULT_STABILITY, compute_decay_score
-from graphctx.embeddings import BaseEmbedder
-from graphctx.models import CATEGORY_PRIORITY, RecallExplanation, RecallResult, ScoreBreakdown
-from graphctx.query_expansion import expand_query, merge_expansion_results
-from graphctx.reranker import rerank_results
-from graphctx.storage import SQLiteStore
-from graphctx.graph_traversal import bfs_graph_traversal, get_episodes_for_entities
-from graphctx.temporal import (
+from palimp.config import GraphConfig, get_config
+from palimp.decay import DEFAULT_STABILITY, compute_decay_score
+from palimp.embeddings import BaseEmbedder
+from palimp.models import CATEGORY_PRIORITY, RecallExplanation, RecallResult, ScoreBreakdown
+from palimp.query_expansion import expand_query
+from palimp.reranker import rerank_results
+from palimp.storage import SQLiteStore
+from palimp.graph_traversal import bfs_graph_traversal, get_episodes_for_entities
+from palimp.temporal import (
     classify_temporal_status,
     detect_temporal_cues,
     should_include_in_mode,
     temporal_score_boost,
 )
 
-# Scoring weights are now loaded from graphctx.config (env-based).
+# Scoring weights are now loaded from palimp.config (env-based).
 # Kept as module-level fallbacks for backward compatibility.
 WEIGHT_LEXICAL = 0.35
 WEIGHT_VECTOR = 0.30
@@ -477,7 +476,7 @@ class RecallEngine:
 
         # Context management (AdaCoM-inspired)
         if agent_tier is not None:
-            from graphctx.context_manager import ContextManager
+            from palimp.context_manager import ContextManager
 
             cm = ContextManager(store=self._store, agent_tier=agent_tier)
             managed = cm.manage_context(ns=ns, query=query, memories=results[:limit], mode=mode)
@@ -595,8 +594,9 @@ class RecallEngine:
 
     def _search_vector(self, ns: str, query: str) -> dict[str, float]:
         """Run vector similarity search and return {episode_id: score}."""
+        model_name = "deterministic-sha256" if self._embedder.__class__.__name__ == "DeterministicEmbedder" else "http-embedder"
         episode_embeddings = self._store.get_all_embeddings(
-            ns, owner_type="episode", model=_DETERMINISTIC_MODEL
+            ns, owner_type="episode", model=model_name
         )
         if not episode_embeddings:
             return {}

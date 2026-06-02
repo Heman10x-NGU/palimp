@@ -1,4 +1,4 @@
-"""GraphCtx MCP server — safe memory/knowledge/recall tools for agent clients.
+"""Palimp MCP server — safe memory/knowledge/recall tools for agent clients.
 
 Guard imports with try/except so the core package works without the ``mcp``
 extra installed.
@@ -19,11 +19,11 @@ try:
 except ImportError:
     FastMCP = None  # type: ignore[assignment,misc]
 
-from graphctx.embeddings import DeterministicEmbedder
-from graphctx.extractor import RuleBasedExtractor
-from graphctx.retriever import RecallEngine
-from graphctx.storage import SQLiteStore
-from graphctx.validate import ValidationError, validate_content, validate_namespace
+from palimp.embeddings import DeterministicEmbedder
+from palimp.extractor import RuleBasedExtractor
+from palimp.retriever import RecallEngine
+from palimp.storage import SQLiteStore
+from palimp.validate import ValidationError, validate_content, validate_namespace
 
 # ---------------------------------------------------------------------------
 # Module-level singletons (initialised lazily on first tool call)
@@ -37,7 +37,7 @@ _extractor: Optional[RuleBasedExtractor] = None
 def _get_store() -> SQLiteStore:
     global _store
     if _store is None:
-        db_path = os.environ.get("GRAPHCTX_DB", os.path.expanduser("~/.graphctx/graphctx.db"))
+        db_path = os.environ.get("PALIMP_DB", os.path.expanduser("~/.palimp/palimp.db"))
         if db_path != ":memory:":
             os.makedirs(os.path.dirname(db_path), exist_ok=True)
         _store = SQLiteStore(db_path)
@@ -147,10 +147,10 @@ def _run_extraction(
 
 if FastMCP is not None:
 
-    mcp = FastMCP("GraphCtx")
+    mcp = FastMCP("Palimp")
 
     @mcp.tool()
-    def graphctx_memory_add(
+    def palimp_memory_add(
         namespace: str,
         content: str,
         source_ref: Optional[str] = None,
@@ -192,7 +192,7 @@ if FastMCP is not None:
         })
 
     @mcp.tool()
-    def graphctx_knowledge_add(
+    def palimp_knowledge_add(
         namespace: str,
         title: str,
         content: str,
@@ -237,7 +237,7 @@ if FastMCP is not None:
         })
 
     @mcp.tool()
-    def graphctx_recall(
+    def palimp_recall(
         namespace: str,
         query: str,
         mode: str = "hybrid",
@@ -263,7 +263,7 @@ if FastMCP is not None:
         return json.dumps({"data": data})
 
     @mcp.tool()
-    def graphctx_context_get(
+    def palimp_context_get(
         namespace: str,
         entity_id: str,
     ) -> str:
@@ -297,7 +297,7 @@ if FastMCP is not None:
         })
 
     @mcp.tool()
-    def graphctx_stats(
+    def palimp_stats(
         namespace: str,
     ) -> str:
         """Get counts for a namespace.
@@ -314,7 +314,7 @@ if FastMCP is not None:
         return json.dumps(data)
 
     @mcp.tool()
-    def graphctx_context_pack(
+    def palimp_context_pack(
         namespace: str,
         task: str,
         budget_tokens: int = 2000,
@@ -331,7 +331,7 @@ if FastMCP is not None:
         except ValidationError as exc:
             return json.dumps({"error": str(exc)})
 
-        from graphctx.cli import _build_context_pack
+        from palimp.cli import _build_context_pack
 
         store = _get_store()
         pack = _build_context_pack(
