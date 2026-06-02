@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.*
+*.key
+*.pem
+*.secret
+
+# Database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Plan files (internal)
+plan_memov2.5pro*.md
+plan_*.md
+
+# Reference repos (cloned, not ours)
+_refs/
+
+# Temp / build artifacts
+/tmp/
+/private/
+*.log
+*.tmp
+
+# Claude Code internals
+.claude/
+.claude-mimo/
+
+# Distribution
+graphctx-*.whl
+graphctx-*.tar.gz
