@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "graphctx"
-version = "0.2.0"
+version = "0.3.0"
 description = "Open-source local context graph for AI agents — memories, knowledge, recall, provenance, and MCP access in a SQLite-first package."
 readme = "README.md"
 license = {text = "MIT"}
