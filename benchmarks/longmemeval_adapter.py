@@ -15,30 +15,114 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from palimp.embeddings import DeterministicEmbedder
+from palimp.embeddings import DeterministicEmbedder, HttpEmbedder, BaseEmbedder
+from palimp.extractor import HttpExtractor, RuleBasedExtractor, BaseExtractor
+from palimp.ingest import ingest_memory
+from palimp.parallel_extractor import AsyncHttpExtractor, CachedExtractor, HybridExtractor
+from palimp.extraction_cache import ExtractionCache
+from palimp.ingest_batch import ingest_batch_sync, BatchItem
 from palimp.retriever import RecallEngine
 from palimp.storage import SQLiteStore
+from palimp.config import get_config
 
 
-from palimp.embeddings import BaseEmbedder
+def _deadline(seconds: float) -> float | None:
+    return time.monotonic() + seconds if seconds and seconds > 0 else None
+
+
+def _check_deadline(deadline: float | None, label: str) -> None:
+    if deadline is not None and time.monotonic() > deadline:
+        raise TimeoutError(f"sample deadline exceeded during {label}")
+
+
+def _heartbeat(state: list[float], heartbeat_seconds: float, message: str) -> None:
+    if heartbeat_seconds <= 0:
+        return
+    now = time.monotonic()
+    if now - state[0] >= heartbeat_seconds:
+        print(f"[watchdog] {message}", flush=True)
+        state[0] = now
+
+
+@contextmanager
+def _timebox(deadline: float | None, label: str):
+    """Interrupt a single blocking benchmark operation once the sample deadline expires."""
+    if deadline is None:
+        yield
+        return
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError(f"sample deadline exceeded before {label}")
+    previous_handler = signal.getsignal(signal.SIGALRM)
+
+    def _raise_timeout(_signum, _frame):
+        raise TimeoutError(f"sample deadline exceeded during {label}")
+
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.setitimer(signal.ITIMER_REAL, remaining)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
+def _decompose_lme_date(date_str: str) -> str:
+    """Decompose an LME date string (e.g. '2023/04/10 (Mon) 17:50') into FTS-matchable words."""
+    if not date_str:
+        return ""
+    import re
+    # Strip day of week parenthetical e.g. '(Mon)' to make parsing clean
+    clean_str = re.sub(r"\([A-Za-z]+\)", "", date_str).strip()
+    try:
+        from dateutil import parser as date_parser
+        dt = date_parser.parse(clean_str)
+        month_name = dt.strftime("%B").lower()  # 'april'
+        month_abbr = dt.strftime("%b").lower()  # 'apr'
+        day_of_week = dt.strftime("%A").lower()  # 'monday'
+        day_of_week_abbr = dt.strftime("%a").lower()  # 'mon'
+        return f"date: {dt.year} {month_name} {month_abbr} {dt.day} {day_of_week} {day_of_week_abbr}"
+    except Exception:
+        # Fallback to simple split logic if parsing fails
+        parts = date_str.split()[0].split('/')
+        if len(parts) == 3:
+            year, month, day = parts
+            months_map = {
+                "01": "january jan", "02": "february feb", "03": "march mar",
+                "04": "april apr", "05": "may may", "06": "june jun",
+                "07": "july jul", "08": "august aug", "09": "september sep",
+                "10": "october oct", "11": "november nov", "12": "december dec"
+            }
+            m_words = months_map.get(month, "")
+            return f"date: {year} {m_words} {int(day)}"
+        return ""
+
 
 def _ingest_sessions(
     store: SQLiteStore,
     embedder: BaseEmbedder,
+    extractor: BaseExtractor | None,
     ns: str,
     sessions: list[list[dict]],
     session_ids: list[str],
+    dates: list[str],
+    deadline: float | None = None,
+    heartbeat_state: list[float] | None = None,
+    heartbeat_seconds: float = 15.0,
 ) -> None:
     """Ingest all history sessions into Palimp at the session granularity."""
     for idx, (session, sess_id) in enumerate(zip(sessions, session_ids)):
+        _check_deadline(deadline, f"ingest session {idx + 1}/{len(sessions)}")
         # Format the entire session as a single text block
         content_parts = []
         for turn in session:
@@ -51,28 +135,30 @@ def _ingest_sessions(
         if not content.strip():
             continue
 
-        # Ingest as a memory episode
-        episode_id = store.insert_episode(
-            ns=ns,
-            content=content,
-            source_type="memory",
-            source_ref=sess_id,
-        )
-        store.insert_memory(ns=ns, content=content, source_ref=sess_id)
+        # Decompose corresponding date
+        if idx < len(dates):
+            date_words = _decompose_lme_date(dates[idx])
+            if date_words:
+                content += f"\nSession {date_words}"
 
-        # Generate and store embedding
-        vec = embedder.embed(content)
-        from palimp.retriever import _vector_to_blob
-        blob = _vector_to_blob(vec)
-        model_name = "deterministic-sha256" if isinstance(embedder, DeterministicEmbedder) else "http-embedder"
-        store.insert_embedding(
-            ns=ns,
-            owner_type="episode",
-            owner_id=episode_id,
-            model=model_name,
-            dimension=embedder.dimension,
-            vector_blob=blob,
-        )
+        # Ingest memory using the public ingestion pipeline
+        with _timebox(deadline, f"ingest session {idx + 1}/{len(sessions)}"):
+            ingest_memory(
+                store=store,
+                embedder=embedder,
+                extractor=extractor,
+                ns=ns,
+                content=content,
+                source_ref=sess_id,
+                extract=True if extractor else False,
+                category="memory",
+            )
+        if heartbeat_state is not None:
+            _heartbeat(
+                heartbeat_state,
+                heartbeat_seconds,
+                f"LongMemEval ingest progress: {idx + 1}/{len(sessions)} sessions",
+            )
 
 
 def _evaluate_retrieval(
@@ -82,6 +168,9 @@ def _evaluate_retrieval(
     correct_session_ids: list[str],
     modes: list[str],
     top_ks: list[int],
+    deadline: float | None = None,
+    heartbeat_state: list[float] | None = None,
+    heartbeat_seconds: float = 15.0,
 ) -> dict:
     """Evaluate retrieval recall for a single question.
 
@@ -91,9 +180,17 @@ def _evaluate_retrieval(
     results_by_mode = {}
 
     for mode in modes:
+        _check_deadline(deadline, f"evaluate mode {mode}")
         # We retrieve up to max(top_ks)
         max_k = max(top_ks)
-        output = engine.recall(ns, question, mode=mode, limit=max_k)
+        with _timebox(deadline, f"recall mode {mode}"):
+            output = engine.recall(ns, question, mode=mode, limit=max_k)
+        if heartbeat_state is not None:
+            _heartbeat(
+                heartbeat_state,
+                heartbeat_seconds,
+                f"LongMemEval evaluated mode={mode}",
+            )
         
         # Extract session IDs from the retrieved episodes
         retrieved_sess_ids = []
@@ -140,10 +237,27 @@ def main():
     parser.add_argument("--limit", type=int, default=0, help="Limit number of samples to run (0 for all)")
     parser.add_argument("--modes", nargs="+", default=["fast", "hybrid", "thinking"])
     parser.add_argument("--top-k", nargs="+", type=int, default=[5, 10], help="Top-K recall limits to evaluate")
+    
+    # Embedder options
     parser.add_argument("--embedder-type", default="deterministic", choices=["deterministic", "http"])
     parser.add_argument("--embedder-endpoint", default="http://localhost:11434/v1/embeddings")
     parser.add_argument("--embedder-model", default="nomic-embed-text")
     parser.add_argument("--embedder-dim", type=int, default=768)
+    parser.add_argument("--embedder-timeout", type=float, default=10.0, help="HTTP embedder request timeout in seconds")
+    
+    # Extractor options
+    parser.add_argument("--extractor-type", default="none", choices=["none", "rule", "http", "hybrid"])
+    parser.add_argument("--extractor-endpoint", default="https://api.mimo.org/v1/chat/completions")
+    parser.add_argument("--extractor-model", default="mimo-v2.5-pro")
+    parser.add_argument("--max-concurrent", type=int, default=10, help="Max concurrent extraction calls")
+    parser.add_argument("--use-cache", action="store_true", help="Use extraction cache")
+    parser.add_argument("--extractor-timeout", type=float, default=30.0, help="HTTP extractor request timeout in seconds")
+
+    # Watchdog options
+    parser.add_argument("--max-sample-seconds", type=float, default=0.0, help="Abort after one sample exceeds this many seconds (0 disables)")
+    parser.add_argument("--max-total-seconds", type=float, default=0.0, help="Stop after total run exceeds this many seconds (0 disables)")
+    parser.add_argument("--heartbeat-seconds", type=float, default=15.0, help="Print watchdog heartbeat after this many seconds of work")
+    
     args = parser.parse_args()
 
     print(f"Loading LongMemEval dataset from {args.dataset}...")
@@ -157,15 +271,22 @@ def main():
 
     all_results = []
     overall_start = time.time()
+    run_status = "ok"
 
     # Track overall statistics
     for idx, sample in enumerate(samples):
+        if args.max_total_seconds > 0 and time.time() - overall_start > args.max_total_seconds:
+            run_status = "total_timeout"
+            print(f"[watchdog] total deadline hit before sample {idx + 1}; writing partial results")
+            break
+
         q_id = sample["question_id"]
         q_type = sample.get("question_type", "unknown")
         question = sample["question"]
         correct_ids = sample.get("answer_session_ids", [])
         sessions = sample["haystack_sessions"]
         session_ids = sample["haystack_session_ids"]
+        dates = sample.get("haystack_dates", [])
 
         print(f"[{idx+1}/{len(samples)}] Sample {q_id} ({q_type}) - {len(sessions)} sessions...")
 
@@ -176,22 +297,67 @@ def main():
 
         try:
             store = SQLiteStore(db_path)
+            sample_deadline = _deadline(args.max_sample_seconds)
+            heartbeat_state = [time.monotonic()]
+            
+            # Setup Embedder
             if args.embedder_type == "http":
-                from palimp.embeddings import HttpEmbedder
                 embedder = HttpEmbedder(
                     endpoint=args.embedder_endpoint,
                     api_key="",
                     model=args.embedder_model,
                     dim=args.embedder_dim,
+                    timeout=args.embedder_timeout,
                 )
             else:
-                embedder = DeterministicEmbedder(dim=384)
+                embedder = DeterministicEmbedder(dim=args.embedder_dim)
+                
+            # Setup Extractor
+            if args.extractor_type == "http":
+                extractor_key = os.environ.get("MIMO_API_KEY", os.environ.get("PALIMP_EXTRACTOR_API_KEY", ""))
+                extractor = AsyncHttpExtractor(
+                    endpoint=args.extractor_endpoint,
+                    api_key=extractor_key,
+                    model=args.extractor_model,
+                    timeout=args.extractor_timeout,
+                    max_concurrent=args.max_concurrent,
+                )
+                if args.use_cache:
+                    extractor = CachedExtractor(extractor)
+            elif args.extractor_type == "hybrid":
+                extractor_key = os.environ.get("MIMO_API_KEY", os.environ.get("PALIMP_EXTRACTOR_API_KEY", ""))
+                http_ext = AsyncHttpExtractor(
+                    endpoint=args.extractor_endpoint,
+                    api_key=extractor_key,
+                    model=args.extractor_model,
+                    timeout=args.extractor_timeout,
+                    max_concurrent=args.max_concurrent,
+                )
+                extractor = HybridExtractor(http_ext)
+                if args.use_cache:
+                    extractor = CachedExtractor(extractor)
+            elif args.extractor_type == "rule":
+                extractor = RuleBasedExtractor()
+            else:
+                extractor = None
+
             engine = RecallEngine(store=store, embedder=embedder)
             ns = f"lme_{q_id}"
 
             # Ingest sessions
             t0 = time.time()
-            _ingest_sessions(store, embedder, ns, sessions, session_ids)
+            _ingest_sessions(
+                store,
+                embedder,
+                extractor,
+                ns,
+                sessions,
+                session_ids,
+                dates,
+                deadline=sample_deadline,
+                heartbeat_state=heartbeat_state,
+                heartbeat_seconds=args.heartbeat_seconds,
+            )
             ingest_time = time.time() - t0
 
             # Evaluate retrieval
@@ -203,10 +369,14 @@ def main():
                 correct_session_ids=correct_ids,
                 modes=args.modes,
                 top_ks=args.top_k,
+                deadline=sample_deadline,
+                heartbeat_state=heartbeat_state,
+                heartbeat_seconds=args.heartbeat_seconds,
             )
             eval_time = time.time() - t0
 
             all_results.append({
+                "status": "ok",
                 "question_id": q_id,
                 "question_type": q_type,
                 "num_sessions": len(sessions),
@@ -215,6 +385,19 @@ def main():
                 "eval_time_s": round(eval_time, 3),
                 "results_by_mode": mode_results,
             })
+        except TimeoutError as exc:
+            run_status = "sample_timeout"
+            print(f"[watchdog] safety stop on sample {q_id}: {exc}")
+            all_results.append({
+                "status": "timeout",
+                "question_id": q_id,
+                "question_type": q_type,
+                "num_sessions": len(sessions),
+                "num_evidence": len(correct_ids),
+                "timeout_reason": str(exc),
+                "results_by_mode": {},
+            })
+            break
 
         finally:
             del store
@@ -274,7 +457,18 @@ def main():
     output_data = {
         "benchmark": "LongMemEval-S",
         "system": "Palimp v0.3.0",
+        "scoring_profile": "fts5_primary",
+        "weights": get_config().weights.to_dict(),
         "embedder": args.embedder_model if args.embedder_type == "http" else "deterministic-sha256",
+        "extractor": args.extractor_type,
+        "safety": {
+            "run_status": run_status,
+            "max_sample_seconds": args.max_sample_seconds,
+            "max_total_seconds": args.max_total_seconds,
+            "heartbeat_seconds": args.heartbeat_seconds,
+            "embedder_timeout": args.embedder_timeout,
+            "extractor_timeout": args.extractor_timeout,
+        },
         "top_ks": args.top_k,
         "total_time_s": round(total_time, 2),
         "overall_summary": overall_summary,

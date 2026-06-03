@@ -25,7 +25,7 @@ This table tracks every open-source project that informed Palimp v0.3.0. Columns
 | sqlite-vec | https://github.com/asg017/sqlite-vec | N/A | MIT | Local vector search as a SQLite extension | v0.4 | Potential optional vector acceleration backend; not required in v0.3 | none |
 | Kuzu | https://github.com/kuzudb/kuzu | N/A | MIT | Embedded graph database with Cypher-like query language | v0.4 | Potential optional graph backend; not required in v0.3 | none |
 | ByteRover / Cipher | N/A | N/A | Elastic License 2.0 | Portable coding-agent memory CLI | reject | Rejected due to Elastic 2.0 license incompatibility with MIT; onboarding workflow expectations noted | none |
-| MemOS | N/A | N/A | Apache-2.0 | Memory lifecycle management (create, update, archive, forget) | schema-hook | Lifecycle state ideas for memory items (active, archived, forgotten); not implementing proactive autonomy | none |
+| MemOS | N/A | N/A | Apache-2.0 | Memory lifecycle management (create, update, archive, forget) | implemented | Lifecycle state ideas for version chains, purpose-layer profile/search separation, and governed forgetting; not implementing proactive autonomy | none |
 | memU | N/A | N/A | Apache-2.0 | Proactive/always-on memory with autonomous retrieval | reject | Rejected for v0.2 scope; proactive autonomy and always-on retrieval are out of scope for a deterministic local context graph | none |
 
 ## Decision Legend

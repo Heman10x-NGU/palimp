@@ -10,11 +10,70 @@ import re
 from typing import Any
 
 
+def _flip_pronouns(q: str) -> str:
+    """Flip first-person pronouns to third-person for matching transcripts."""
+    replacements = [
+        (r"\bI\b", "the user"),
+        (r"\bmy\b", "the user's"),
+        (r"\bme\b", "the user"),
+        (r"\bwe\b", "the users"),
+        (r"\bour\b", "the users'"),
+        (r"\bus\b", "the users"),
+        (r"\bMy\b", "the user's"),
+        (r"\bMe\b", "the user"),
+        (r"\bWe\b", "the users"),
+        (r"\bOur\b", "the users'"),
+        (r"\bUs\b", "the users"),
+    ]
+    res = q
+    for pattern, rep in replacements:
+        res = re.sub(pattern, rep, res)
+    return res
+
+
+def has_temporal_signal(query: str) -> bool:
+    """Detect if query has cues referring to the past or general time/tense changes."""
+    temporal_keywords = [
+        "used to", "before", "previously", "in the past", "back when",
+        "historically", "last year", "formerly", "old", "prior to",
+        "when did", "when was", "what was", "what were", "old address",
+        "was", "were", "had", "previously"
+    ]
+    q_lower = query.lower()
+    return any(kw in q_lower for kw in temporal_keywords)
+
+
+def _shift_tenses(q: str) -> str:
+    """Shift present-tense verbs to past-tense for querying historical data."""
+    def rep(match):
+        val = match.group().lower()
+        mapping = {"is": "was", "are": "were", "has": "had", "have": "had"}
+        res = mapping.get(val, val)
+        if match.group().istitle():
+            return res.title()
+        return res
+    return re.sub(r"\b(is|are|has|have)\b", rep, q, flags=re.IGNORECASE)
+
+
+def _extract_keywords(query: str) -> list[str]:
+    """Extract stopword-filtered keywords to build cleaner search representations."""
+    stop_question = {
+        "what", "where", "who", "when", "which", "how", "did", "does",
+        "do", "is", "are", "was", "were", "the", "a", "an", "of", "in",
+        "to", "for", "on", "at", "by", "with", "from", "and", "or", "my",
+        "i", "you", "me", "we", "our", "your", "their", "its", "tell",
+        "about", "can", "could", "would", "should", "have", "had",
+        "be", "been"
+    }
+    tokens = re.findall(r"\b[a-zA-Z]{2,}\b", query)
+    return [t for t in tokens if t.lower() not in stop_question]
+
+
 def expand_query(query: str) -> list[str]:
     """Split complex query into sub-queries.
 
     Splits on: and, or, but, semicolons, commas with conjunctions.
-    Also extracts named entities for targeted sub-queries.
+    Also extracts named entities, flips pronouns, shifts tenses, and creates keyword variants.
     """
     # Split on conjunctions and punctuation
     splits = re.split(
@@ -41,6 +100,28 @@ def expand_query(query: str) -> list[str]:
         if any(cue in sq.lower() for cue in ["before", "previously", "formerly"]):
             temporal_expansions.append(sq)
 
+    # Flipping pronouns to match speaker dialogue/fact extraction perspectives
+    flipped_queries: list[str] = []
+    for sq in sub_queries:
+        flipped = _flip_pronouns(sq)
+        if flipped != sq:
+            flipped_queries.append(flipped)
+
+    # Tense shifting for queries with past temporal signals
+    tense_queries: list[str] = []
+    all_current = sub_queries + flipped_queries
+    for sq in all_current:
+        if has_temporal_signal(sq):
+            shifted = _shift_tenses(sq)
+            if shifted != sq:
+                tense_queries.append(shifted)
+
+    # Keyword-only query expansion to strip conversational noise
+    keyword_queries: list[str] = []
+    kw_list = _extract_keywords(query)
+    if len(kw_list) >= 2:
+        keyword_queries.append(" ".join(kw_list))
+
     # Extract entities for targeted queries (capitalized words > 2 chars)
     _STOPWORDS = {
         "what", "where", "when", "who", "why", "how", "which",
@@ -60,7 +141,15 @@ def expand_query(query: str) -> list[str]:
             if clean and len(clean) > 2 and clean.lower() not in _STOPWORDS:
                 entity_queries.append(clean)
 
-    all_queries = sub_queries + temporal_expansions + entity_queries
+    all_queries = (
+        sub_queries
+        + temporal_expansions
+        + flipped_queries
+        + tense_queries
+        + keyword_queries
+        + entity_queries
+    )
+    
     # Dedupe while preserving order
     seen: set[str] = set()
     result: list[str] = []

@@ -8,22 +8,22 @@ from palimp.config import GraphConfig, SearchWeights, get_config
 
 
 # ---------------------------------------------------------------------------
-# Default weights match plan section 3.3
+# Default weights match episodic-grounding benchmark-safe scoring
 # ---------------------------------------------------------------------------
 
 
 class TestDefaultWeights:
-    """Default weights must match plan values: 0.35/0.30/0.15/0.05/0.05/0.05/0.05."""
+    """Default weights must keep FTS5 primary and semantic vectors secondary."""
 
     def test_default_weights(self):
         w = SearchWeights()
-        assert w.lexical == pytest.approx(0.35)
-        assert w.vector == pytest.approx(0.30)
-        assert w.graph == pytest.approx(0.15)
-        assert w.recency == pytest.approx(0.05)
+        assert w.lexical == pytest.approx(0.60)
+        assert w.vector == pytest.approx(0.15)
+        assert w.graph == pytest.approx(0.10)
+        assert w.recency == pytest.approx(0.0)
         assert w.confidence == pytest.approx(0.05)
-        assert w.temporal == pytest.approx(0.05)
-        assert w.category == pytest.approx(0.05)
+        assert w.temporal == pytest.approx(0.10)
+        assert w.category == pytest.approx(0.0)
 
     def test_default_total(self):
         w = SearchWeights()
@@ -64,7 +64,7 @@ class TestEnvOverride:
         w = SearchWeights()
         assert w.lexical == pytest.approx(0.50)
         # Others unchanged
-        assert w.vector == pytest.approx(0.30)
+        assert w.vector == pytest.approx(0.15)
 
     def test_env_override_vector(self, monkeypatch):
         monkeypatch.setenv("PALIMP_WEIGHT_VECTOR", "0.60")
@@ -145,13 +145,13 @@ class TestWeightsInExplanation:
 
         sc = output.explanation.scoring_config
         assert sc, "scoring_config should not be empty"
-        assert sc["lexical"] == pytest.approx(0.35)
-        assert sc["vector"] == pytest.approx(0.30)
-        assert sc["graph"] == pytest.approx(0.15)
-        assert sc["recency"] == pytest.approx(0.05)
+        assert sc["lexical"] == pytest.approx(0.60)
+        assert sc["vector"] == pytest.approx(0.15)
+        assert sc["graph"] == pytest.approx(0.10)
+        assert sc["recency"] == pytest.approx(0.0)
         assert sc["confidence"] == pytest.approx(0.05)
-        assert sc["temporal"] == pytest.approx(0.05)
-        assert sc["category"] == pytest.approx(0.05)
+        assert sc["temporal"] == pytest.approx(0.10)
+        assert sc["category"] == pytest.approx(0.0)
 
     def test_env_override_shows_in_explanation(self, memory_store, monkeypatch):
         """When env weights are changed, explanation reflects the new values."""
@@ -180,4 +180,4 @@ class TestWeightsInExplanation:
         sc = output.explanation.scoring_config
         assert sc["lexical"] == pytest.approx(0.50)
         # Other defaults still present
-        assert sc["vector"] == pytest.approx(0.30)
+        assert sc["vector"] == pytest.approx(0.15)

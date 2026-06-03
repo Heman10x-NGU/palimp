@@ -152,6 +152,6 @@ palimp recall --namespace myapp "import error fix" --temporal-mode all
 
 | Variable | Default | Description |
 |---|---|---|
-| `PALIMP_WEIGHT_TEMPORAL` | `0.05` | Weight of temporal match in scoring |
+| `PALIMP_WEIGHT_TEMPORAL` | `0.10` | Weight of temporal match in scoring |
 
 Temporal scoring boosts facts whose temporal status matches the query mode (current for current queries, historical for historical queries).

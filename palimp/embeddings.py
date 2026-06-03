@@ -101,28 +101,47 @@ class HttpEmbedder(BaseEmbedder):
     def dimension(self) -> int:
         return self._dim
 
-    def _request(self, texts: list[str]) -> list[list[float]]:
-        """Send embedding request and return list of vectors."""
-        headers = {
-            "Content-Type": "application/json",
-        }
-        if self._api_key and self._api_key.strip():
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        # Truncate each text to 6000 characters to fit context limits (Ollama/API)
-        truncated_texts = [t[:6000] for t in texts]
-        payload = {
-            "model": self._model,
-            "input": truncated_texts,
-        }
-        with httpx.Client(timeout=self._timeout) as client:
+    def _request_single(self, text: str, client: httpx.Client, headers: dict) -> list[float]:
+        """Request embedding for a single text. Tries OpenAI format, falls back to Ollama."""
+        truncated = text[:6000]
+        # Try OpenAI format first
+        payload = {"model": self._model, "input": [truncated]}
+        first_error: Exception | None = None
+        try:
             resp = client.post(self._endpoint, json=payload, headers=headers)
             resp.raise_for_status()
+            body = resp.json()
+            data = body.get("data", [])
+            if data:
+                return sorted(data, key=lambda d: d.get("index", 0))[0]["embedding"]
+            # Ollama format: {"prompt": "..."} -> {"embedding": [...]}
+            embedding = body.get("embedding")
+            if embedding:
+                return embedding
+        except Exception as exc:
+            first_error = exc
+        # If OpenAI format returned nothing, try Ollama native format
+        payload_ollama = {"model": self._model, "prompt": truncated}
+        try:
+            resp2 = client.post(self._endpoint, json=payload_ollama, headers=headers)
+            resp2.raise_for_status()
+            body2 = resp2.json()
+            emb2 = body2.get("embedding")
+            if emb2:
+                return emb2
+        except Exception:
+            if first_error is not None:
+                raise first_error
+            raise
+        return []
 
-        body = resp.json()
-        data = body.get("data", [])
-        # Sort by index to guarantee ordering
-        data_sorted = sorted(data, key=lambda d: d.get("index", 0))
-        return [item["embedding"] for item in data_sorted]
+    def _request(self, texts: list[str]) -> list[list[float]]:
+        """Send embedding request and return list of vectors."""
+        headers = {"Content-Type": "application/json"}
+        if self._api_key and self._api_key.strip():
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        with httpx.Client(timeout=self._timeout) as client:
+            return [self._request_single(t, client, headers) for t in texts]
 
     def embed(self, text: str) -> list[float]:
         """Embed a single text via HTTP."""

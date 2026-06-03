@@ -35,13 +35,16 @@ class SearchWeights:
     """Configurable scoring weights loaded from environment variables."""
 
     def __init__(self) -> None:
-        self.lexical = _env_float("PALIMP_WEIGHT_LEXICAL", 0.35)
-        self.vector = _env_float("PALIMP_WEIGHT_VECTOR", 0.30)
-        self.graph = _env_float("PALIMP_WEIGHT_GRAPH", 0.15)
-        self.recency = _env_float("PALIMP_WEIGHT_RECENCY", 0.05)
+        # Default to episodic grounding first. Semantic vectors are useful as
+        # a weak secondary signal, but benchmark recall should not collapse
+        # into "similar text wins" when exact evidence is available in FTS5.
+        self.lexical = _env_float("PALIMP_WEIGHT_LEXICAL", 0.60)
+        self.vector = _env_float("PALIMP_WEIGHT_VECTOR", 0.15)
+        self.graph = _env_float("PALIMP_WEIGHT_GRAPH", 0.10)
+        self.recency = _env_float("PALIMP_WEIGHT_RECENCY", 0.0)
         self.confidence = _env_float("PALIMP_WEIGHT_CONFIDENCE", 0.05)
-        self.temporal = _env_float("PALIMP_WEIGHT_TEMPORAL", 0.05)
-        self.category = _env_float("PALIMP_WEIGHT_CATEGORY", 0.05)
+        self.temporal = _env_float("PALIMP_WEIGHT_TEMPORAL", 0.10)
+        self.category = _env_float("PALIMP_WEIGHT_CATEGORY", 0.0)
 
     def to_dict(self) -> dict[str, float]:
         return {

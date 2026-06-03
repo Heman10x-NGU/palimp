@@ -444,6 +444,8 @@ def run_benchmark(
         },
         "tombstoned_exclusion": tombstoned,
         "v3_config": {
+            "scoring_profile": "fts5_primary",
+            "weights": config.weights.to_dict(),
             "graph_max_hops": config.max_hops,
             "temporal_filter_enabled": True,
             "alias_dedup_enabled": True,

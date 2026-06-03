@@ -18,6 +18,7 @@ import math
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
 from palimp.config import GraphConfig, get_config
@@ -37,10 +38,10 @@ from palimp.temporal import (
 
 # Scoring weights are now loaded from palimp.config (env-based).
 # Kept as module-level fallbacks for backward compatibility.
-WEIGHT_LEXICAL = 0.35
-WEIGHT_VECTOR = 0.30
-WEIGHT_GRAPH = 0.15
-WEIGHT_RECENCY = 0.05
+WEIGHT_LEXICAL = 0.60
+WEIGHT_VECTOR = 0.15
+WEIGHT_GRAPH = 0.10
+WEIGHT_RECENCY = 0.0
 WEIGHT_CONFIDENCE = 0.05
 
 # Model name used for deterministic embeddings
@@ -75,6 +76,37 @@ def _compute_matched_terms(query_terms: list[str], content: str) -> list[str]:
     """
     content_lower = content.lower()
     return [t for t in query_terms if t in content_lower]
+
+
+def _parse_iso(ts: str) -> datetime:
+    """Parse ISO timestamps, accepting the common trailing-Z form."""
+    normalized = ts.replace("Z", "+00:00")
+    dt = datetime.fromisoformat(normalized)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _episode_recallable(episode: dict[str, Any], as_of: Optional[str] = None) -> bool:
+    """Return whether an episode can participate in recall.
+
+    Tombstones preserve audit history but must not surface. Governed forgetting
+    is softer: the row and provenance remain inspectable, while recall excludes
+    explicitly forgotten or expired episodes.
+    """
+    if episode.get("deleted_at") is not None or episode.get("tombstoned_at") is not None:
+        return False
+    if bool(episode.get("is_forgotten", 0)):
+        return False
+    forget_after = episode.get("forget_after")
+    if forget_after:
+        ref = _parse_iso(as_of) if as_of else datetime.now(timezone.utc)
+        try:
+            if ref >= _parse_iso(forget_after):
+                return False
+        except ValueError:
+            return False
+    return True
 
 
 @dataclass
@@ -206,12 +238,20 @@ class RecallEngine:
         if not all_episode_ids:
             return empty_output
 
-        # Load episodes and filter out tombstoned/deleted
+        # Load episodes and filter out tombstoned/deleted/forgotten/expired.
         episodes = self._store.get_episodes_by_ids(list(all_episode_ids))
         live_episodes: dict[str, dict[str, Any]] = {}
         for ep in episodes:
-            if ep.get("deleted_at") is None and ep.get("tombstoned_at") is None:
+            if _episode_recallable(ep, as_of):
                 live_episodes[ep["id"]] = ep
+
+        # Profile memories are purpose-layer context: they are eligible even
+        # when the task query does not lexically match them. They still pass
+        # normal safety/lifecycle filters and scoring.
+        if mode in ("hybrid", "thinking"):
+            for ep in self._store.get_profile_episodes(ns):
+                if _episode_recallable(ep, as_of):
+                    live_episodes.setdefault(ep["id"], ep)
 
         if not live_episodes:
             return empty_output
@@ -288,7 +328,7 @@ class RecallEngine:
                 if new_ep_ids:
                     new_eps = self._store.get_episodes_by_ids(list(new_ep_ids))
                     for ep in new_eps:
-                        if ep.get("deleted_at") is None and ep.get("tombstoned_at") is None:
+                        if _episode_recallable(ep, as_of):
                             live_episodes[ep["id"]] = ep
                             norm_lexical[ep["id"]] = 0.0
                             norm_vector[ep["id"]] = 0.0
@@ -345,9 +385,16 @@ class RecallEngine:
             trig_boost = trigger_boosts.get(eid, 0.0)
 
             if mode == "fast":
-                # Fast: lexical + vector only (weights renormalised to 0.55/0.45)
+                # Fast: lexical + vector only, preserving the configured
+                # FTS5-primary lexical/vector balance.
                 if vector_scores:
-                    combined = (0.55 * lex) + (0.45 * vec)
+                    fast_total = w.lexical + w.vector
+                    if fast_total <= 0:
+                        combined = lex
+                    else:
+                        combined = ((w.lexical / fast_total) * lex) + (
+                            (w.vector / fast_total) * vec
+                        )
                 else:
                     combined = lex  # FTS-only fallback
             else:
@@ -392,9 +439,14 @@ class RecallEngine:
             temporal_status, temporal_reason = classify_temporal_status(
                 ep_valid_from, ep_valid_until, as_of
             )
+            temporal_component = temporal_score_boost(temporal_status, effective_temporal_mode)
+            purpose_boost = 0.05 if ep.get("purpose") == "profile" and mode != "fast" else 0.0
 
             # Apply temporal score boost
-            combined *= temporal_score_boost(temporal_status, effective_temporal_mode)
+            if mode != "fast":
+                combined += w.temporal * temporal_component
+                combined += purpose_boost
+            combined *= temporal_component
 
             # Determine kind (memory or knowledge)
             kind = self._determine_kind(eid)
@@ -502,6 +554,9 @@ class RecallEngine:
                 entry: dict[str, Any] = {"episode_id": r.id, "final_score": r.score}
                 if r.score_breakdown:
                     entry["scores"] = r.score_breakdown.model_dump()
+                    entry["purpose"] = live_episodes.get(r.id, {}).get("purpose", "search")
+                    entry["version"] = live_episodes.get(r.id, {}).get("version", 1)
+                    entry["is_latest"] = bool(live_episodes.get(r.id, {}).get("is_latest", 1))
                 if r.why_retrieved:
                     entry["why_retrieved"] = r.why_retrieved
                 # Add matched_terms from stored metadata

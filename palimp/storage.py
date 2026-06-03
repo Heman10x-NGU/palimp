@@ -76,6 +76,12 @@ class SQLiteStore:
                 source_type     TEXT NOT NULL,
                 source_ref      TEXT,
                 metadata        TEXT,
+                version         INTEGER NOT NULL DEFAULT 1,
+                parent_episode_id TEXT,
+                is_latest       INTEGER NOT NULL DEFAULT 1,
+                purpose         TEXT NOT NULL DEFAULT 'search',
+                forget_after    TEXT,
+                is_forgotten    INTEGER NOT NULL DEFAULT 0,
                 created_at      TEXT NOT NULL,
                 last_accessed_at TEXT,
                 stability       REAL NOT NULL DEFAULT 30.0,
@@ -265,8 +271,14 @@ class SQLiteStore:
             """
         )
 
-        # Migration: add decay columns to episode table if missing
+        # Migration: add lifecycle/version/purpose/decay columns to episode if missing.
         for col, col_def in [
+            ("version", "INTEGER NOT NULL DEFAULT 1"),
+            ("parent_episode_id", "TEXT"),
+            ("is_latest", "INTEGER NOT NULL DEFAULT 1"),
+            ("purpose", "TEXT NOT NULL DEFAULT 'search'"),
+            ("forget_after", "TEXT"),
+            ("is_forgotten", "INTEGER NOT NULL DEFAULT 0"),
             ("last_accessed_at", "TEXT"),
             ("stability", "REAL NOT NULL DEFAULT 30.0"),
             ("pinned", "INTEGER NOT NULL DEFAULT 0"),
@@ -334,13 +346,40 @@ class SQLiteStore:
         self.ensure_namespace(ns)
         episode_id = _new_id("eps")
         now = _now_iso()
+        lifecycle = self._derive_lifecycle_fields(metadata)
         conn = self._conn()
         with self._lock:
+            parent_episode_id = lifecycle["parent_episode_id"]
+            if parent_episode_id:
+                parent = self._resolve_parent_episode(conn, parent_episode_id)
+                if parent is not None:
+                    parent_episode_id = parent["id"]
+                    lifecycle["version"] = int(parent["version"] or 1) + 1
+                    conn.execute(
+                        "UPDATE episode SET is_latest = 0 WHERE id = ?",
+                        (parent_episode_id,),
+                    )
             conn.execute(
                 """INSERT INTO episode
-                   (id, namespace, content, source_type, source_ref, metadata, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (episode_id, ns, content, source_type, source_ref, json.dumps(metadata) if metadata else None, now),
+                   (id, namespace, content, source_type, source_ref, metadata,
+                    version, parent_episode_id, is_latest, purpose, forget_after,
+                    is_forgotten, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    episode_id,
+                    ns,
+                    content,
+                    source_type,
+                    source_ref,
+                    json.dumps(metadata) if metadata else None,
+                    lifecycle["version"],
+                    parent_episode_id,
+                    1 if lifecycle["is_latest"] else 0,
+                    lifecycle["purpose"],
+                    lifecycle["forget_after"],
+                    1 if lifecycle["is_forgotten"] else 0,
+                    now,
+                ),
             )
             # FTS index
             try:
@@ -353,12 +392,82 @@ class SQLiteStore:
             conn.commit()
         return episode_id
 
+    @staticmethod
+    def _derive_lifecycle_fields(metadata: Optional[dict[str, Any]]) -> dict[str, Any]:
+        """Extract version-chain, purpose, and forgetting fields from metadata."""
+        meta = metadata or {}
+        parent_episode_id = (
+            meta.get("parent_episode_id")
+            or meta.get("parentEpisodeId")
+            or meta.get("parentMemoryId")
+            or meta.get("parent_memory_id")
+        )
+        purpose = str(meta.get("purpose", "search")).strip().lower() or "search"
+        if purpose not in {"search", "profile"}:
+            purpose = "search"
+        version = meta.get("version", 1)
+        try:
+            version = max(1, int(version))
+        except (TypeError, ValueError):
+            version = 1
+        is_latest = meta.get("is_latest", meta.get("isLatest", True))
+        forget_after = meta.get("forget_after") or meta.get("forgetAfter")
+        is_forgotten = bool(meta.get("is_forgotten", meta.get("isForgotten", False)))
+        return {
+            "version": version,
+            "parent_episode_id": parent_episode_id,
+            "is_latest": bool(is_latest),
+            "purpose": purpose,
+            "forget_after": forget_after,
+            "is_forgotten": is_forgotten,
+        }
+
+    @staticmethod
+    def _resolve_parent_episode(conn: sqlite3.Connection, parent_id: str) -> Optional[dict[str, Any]]:
+        """Resolve a parent ID that may be either an episode ID or memory ID."""
+        row = conn.execute("SELECT * FROM episode WHERE id = ?", (parent_id,)).fetchone()
+        if row is not None:
+            return dict(row)
+        row = conn.execute(
+            """SELECT e.* FROM episode e
+               JOIN memory m ON m.episode_id = e.id
+               WHERE m.id = ?""",
+            (parent_id,),
+        ).fetchone()
+        if row is not None:
+            return dict(row)
+        return None
+
     def get_episode(self, episode_id: str) -> Optional[dict[str, Any]]:
         conn = self._conn()
         row = conn.execute("SELECT * FROM episode WHERE id = ?", (episode_id,)).fetchone()
         if row is None:
             return None
         return dict(row)
+
+    def forget_episode(self, episode_id: str) -> None:
+        """Soft-forget an episode without deleting provenance history."""
+        conn = self._conn()
+        with self._lock:
+            conn.execute("UPDATE episode SET is_forgotten = 1 WHERE id = ?", (episode_id,))
+            conn.commit()
+
+    def get_profile_episodes(self, ns: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Return always-relevant profile episodes for a namespace."""
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT * FROM episode
+               WHERE namespace = ?
+               AND purpose = 'profile'
+               AND deleted_at IS NULL
+               AND tombstoned_at IS NULL
+               AND is_forgotten = 0
+               AND (forget_after IS NULL OR forget_after > ?)
+               ORDER BY created_at DESC
+               LIMIT ?""",
+            (ns, _now_iso(), limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     def tombstone_episode(self, episode_id: str) -> None:
         now = _now_iso()

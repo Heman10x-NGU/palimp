@@ -7,12 +7,11 @@ name = "palimp"
 version = "0.3.0"
 description = "Palimp — layers of truth for AI agents. Local-first context graph with memories, knowledge, recall, provenance, and MCP access in a SQLite-first package."
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
