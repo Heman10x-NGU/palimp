@@ -57,3 +57,8 @@ _refs/
 # Distribution
 graphctx-*.whl
 graphctx-*.tar.gz
+palimp-*.whl
+palimp-*.tar.gz
+
+# Benchmark results (regenerated each run, machine-specific)
+results/*.json
