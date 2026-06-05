@@ -318,6 +318,25 @@ class SQLiteStore:
             # FTS5 already exists or not available; ignore
             pass
 
+        # Performance indexes for recall queries
+        for idx_sql in [
+            "CREATE INDEX IF NOT EXISTS idx_episode_namespace ON episode(namespace)",
+            "CREATE INDEX IF NOT EXISTS idx_episode_deleted ON episode(deleted_at)",
+            "CREATE INDEX IF NOT EXISTS idx_memory_episode ON memory(episode_id)",
+            "CREATE INDEX IF NOT EXISTS idx_knowledge_episode ON knowledge(episode_id)",
+            "CREATE INDEX IF NOT EXISTS idx_provenance_episode ON provenance(episode_id)",
+            "CREATE INDEX IF NOT EXISTS idx_provenance_entity ON provenance(entity_id)",
+            "CREATE INDEX IF NOT EXISTS idx_entity_deleted ON entity(deleted_at)",
+            "CREATE INDEX IF NOT EXISTS idx_entity_namespace ON entity(namespace)",
+            "CREATE INDEX IF NOT EXISTS idx_embedding_ns_owner_model ON embedding(namespace, owner_type, model)",
+            "CREATE INDEX IF NOT EXISTS idx_claim_subject ON claim(subject_entity_id)",
+            "CREATE INDEX IF NOT EXISTS idx_claim_object ON claim(object_entity_id)",
+        ]:
+            try:
+                conn.execute(idx_sql)
+            except sqlite3.OperationalError:
+                pass
+
     # ------------------------------------------------------------------
     # Namespace
     # ------------------------------------------------------------------
@@ -823,6 +842,27 @@ class SQLiteStore:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_entities_for_episodes(self, episode_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Batch fetch entities for multiple episodes in one query.
+
+        Returns {episode_id: [entity, ...]}.
+        """
+        if not episode_ids:
+            return {}
+        conn = self._conn()
+        placeholders = ",".join("?" for _ in episode_ids)
+        rows = conn.execute(
+            f"""SELECT e.*, p.episode_id as prov_episode_id FROM entity e
+                JOIN provenance p ON p.entity_id = e.id
+                WHERE p.episode_id IN ({placeholders}) AND e.deleted_at IS NULL""",
+            episode_ids,
+        ).fetchall()
+        result: dict[str, list[dict[str, Any]]] = {eid: [] for eid in episode_ids}
+        for row in rows:
+            eid = row["prov_episode_id"]
+            result.setdefault(eid, []).append(dict(row))
+        return result
+
     def find_entity_by_alias(self, ns: str, normalized_name: str) -> Optional[dict[str, Any]]:
         """Look up an entity by normalized alias within a namespace.
 
@@ -1097,6 +1137,36 @@ class SQLiteStore:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_claims_for_entities(self, entity_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Batch fetch claims for multiple entities in one query.
+
+        Returns {entity_id: [claim, ...]}.
+        Chunks entity_ids to avoid SQLite's variable limit (999).
+        """
+        if not entity_ids:
+            return {}
+        conn = self._conn()
+        result: dict[str, list[dict[str, Any]]] = {eid: [] for eid in entity_ids}
+        chunk_size = 500
+        for i in range(0, len(entity_ids), chunk_size):
+            chunk = entity_ids[i:i + chunk_size]
+            placeholders = ",".join("?" for _ in chunk)
+            rows = conn.execute(
+                f"""SELECT * FROM claim
+                    WHERE (subject_entity_id IN ({placeholders}) OR object_entity_id IN ({placeholders}))
+                    AND deleted_at IS NULL""",
+                chunk + chunk,
+            ).fetchall()
+            for row in rows:
+                row_dict = dict(row)
+                sid = row_dict.get("subject_entity_id")
+                oid = row_dict.get("object_entity_id")
+                if sid in result:
+                    result[sid].append(row_dict)
+                if oid in result and oid != sid:
+                    result[oid].append(row_dict)
+        return result
+
     # ------------------------------------------------------------------
     # Provenance
     # ------------------------------------------------------------------
@@ -1199,6 +1269,18 @@ class SQLiteStore:
             (ns, owner_type, model),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def count_embeddings(
+        self, ns: str, owner_type: str, model: str
+    ) -> int:
+        """Fast count of embeddings without loading blobs."""
+        conn = self._conn()
+        row = conn.execute(
+            """SELECT COUNT(*) as cnt FROM embedding
+               WHERE namespace = ? AND owner_type = ? AND model = ?""",
+            (ns, owner_type, model),
+        ).fetchone()
+        return row["cnt"] if row else 0
 
     # ------------------------------------------------------------------
     # FTS search
@@ -1453,6 +1535,38 @@ class SQLiteStore:
         if row is not None:
             return row["category"] or "other"
         return "other"
+
+    def get_memory_categories_batch(self, episode_ids: list[str]) -> dict[str, str]:
+        """Batch fetch categories for multiple episodes in two queries.
+
+        Returns {episode_id: category}.
+        """
+        if not episode_ids:
+            return {}
+        conn = self._conn()
+        placeholders = ",".join("?" for _ in episode_ids)
+        result: dict[str, str] = {eid: "other" for eid in episode_ids}
+
+        # Query memory table
+        rows = conn.execute(
+            f"SELECT episode_id, category FROM memory WHERE episode_id IN ({placeholders})",
+            episode_ids,
+        ).fetchall()
+        for row in rows:
+            result[row["episode_id"]] = row["category"] or "other"
+
+        # Query knowledge table (only for episodes not found in memory)
+        remaining = [eid for eid in episode_ids if result[eid] == "other"]
+        if remaining:
+            placeholders2 = ",".join("?" for _ in remaining)
+            rows2 = conn.execute(
+                f"SELECT episode_id, category FROM knowledge WHERE episode_id IN ({placeholders2})",
+                remaining,
+            ).fetchall()
+            for row in rows2:
+                result[row["episode_id"]] = row["category"] or "other"
+
+        return result
 
     # ------------------------------------------------------------------
     # Integrity / diagnostics

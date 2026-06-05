@@ -277,9 +277,10 @@ class RecallEngine:
                 initial_combined[eid] = norm_lexical.get(eid, 0.0) + norm_vector.get(eid, 0.0)
             top_eps = sorted(initial_combined, key=lambda k: initial_combined[k], reverse=True)[:10]
 
+            # Batch fetch entities for top episodes
+            top_entities = self._store.get_entities_for_episodes(top_eps)
             for eid in top_eps:
-                ents = self._store.get_entities_for_episode(eid)
-                for ent in ents:
+                for ent in top_entities.get(eid, []):
                     if ent.get("deleted_at") is None:
                         seed_entity_ids.append(ent["id"])
 
@@ -350,26 +351,30 @@ class RecallEngine:
         episode_categories: dict[str, str] = {}
         trigger_boosts: dict[str, float] = {}
         if mode in ("hybrid", "thinking"):
-            # Load category for each episode
-            for eid in live_episodes:
-                cat = self._store.get_memory_category(eid)
-                episode_categories[eid] = cat
+            # Batch load categories for all episodes
+            episode_categories = self._store.get_memory_categories_batch(list(live_episodes.keys()))
+            for eid, cat in episode_categories.items():
                 category_scores[eid] = CATEGORY_PRIORITY.get(cat, 0.2)
 
             # Trigger boost: check if query contains any trigger terms
             query_lower = query.lower()
             all_triggers = self._store.list_triggers(ns)
-            for trig in all_triggers:
-                term = trig["term"]
-                if term in query_lower:
-                    mem_id = trig["memory_id"]
-                    # Find episodes linked to this memory_id
-                    for eid in live_episodes:
-                        mem_row = conn_execute_safe(
-                            self._store, "SELECT id FROM memory WHERE id = ? AND episode_id = ?",
-                            (mem_id, eid)
-                        )
-                        if mem_row:
+            if all_triggers:
+                # Build memory_id -> episode_id mapping
+                mem_to_ep: dict[str, str] = {}
+                for eid in live_episodes:
+                    mem_row = conn_execute_safe(
+                        self._store, "SELECT id FROM memory WHERE episode_id = ?", (eid,)
+                    )
+                    if mem_row:
+                        mem_to_ep[mem_row["id"]] = eid
+
+                for trig in all_triggers:
+                    term = trig["term"]
+                    if term in query_lower:
+                        mem_id = trig["memory_id"]
+                        eid = mem_to_ep.get(mem_id)
+                        if eid:
                             trigger_boosts[eid] = trigger_boosts.get(eid, 0.0) + 0.2
 
         # 7. Combine scores per mode (using configurable weights)
@@ -648,13 +653,26 @@ class RecallEngine:
         return scores
 
     def _search_vector(self, ns: str, query: str) -> dict[str, float]:
-        """Run vector similarity search and return {episode_id: score}."""
+        """Run vector similarity search and return {episode_id: score}.
+
+        For large datasets (>10K embeddings), skip vector search entirely
+        and rely on FTS5 lexical search. Vector search with brute-force
+        cosine similarity in Python is O(n) per query — too slow for 20K+ records.
+        """
         model_name = "deterministic-sha256" if self._embedder.__class__.__name__ == "DeterministicEmbedder" else "http-embedder"
+
+        # Fast count check — don't load all embeddings if we'll skip them
+        MAX_EMBEDDINGS_FOR_VECTOR_SEARCH = 10000
+        count = self._store.count_embeddings(ns, owner_type="episode", model=model_name)
+        if count == 0 or count > MAX_EMBEDDINGS_FOR_VECTOR_SEARCH:
+            return {}
+
         episode_embeddings = self._store.get_all_embeddings(
             ns, owner_type="episode", model=model_name
         )
         if not episode_embeddings:
             return {}
+
         query_vec = self._embedder.embed(query)
         scores: dict[str, float] = {}
         for emb_row in episode_embeddings:
@@ -676,10 +694,12 @@ class RecallEngine:
         The boost is the fraction of candidate episodes that share at least
         one entity with the current episode (1-hop neighbor density).
         """
-        # Map episode_id -> set of entity_ids
+        # Batch fetch entities for all episodes
+        episode_ids = list(episodes.keys())
+        ep_entities_raw = self._store.get_entities_for_episodes(episode_ids)
         ep_entities: dict[str, set[str]] = {}
-        for eid in episodes:
-            ents = self._store.get_entities_for_episode(eid)
+        for eid in episode_ids:
+            ents = ep_entities_raw.get(eid, [])
             ep_entities[eid] = {e["id"] for e in ents if e.get("deleted_at") is None}
 
         # Compute boost: fraction of other episodes sharing at least one entity
@@ -730,26 +750,40 @@ class RecallEngine:
     def _compute_confidence_scores(
         self, ns: str, episodes: dict[str, dict[str, Any]]
     ) -> dict[str, float]:
-        """Compute confidence score as avg entity/claim confidence linked to episode."""
+        """Compute confidence score as avg entity/claim confidence linked to episode.
+
+        Uses batch queries to avoid N+1 problem.
+        """
+        episode_ids = list(episodes.keys())
+        if not episode_ids:
+            return {}
+
+        # Batch fetch entities for all episodes
+        ep_entities = self._store.get_entities_for_episodes(episode_ids)
+
+        # Collect all entity IDs
+        all_entity_ids: list[str] = []
+        for ents in ep_entities.values():
+            for ent in ents:
+                if ent.get("deleted_at") is None:
+                    all_entity_ids.append(ent["id"])
+
+        # Batch fetch claims for all entities
+        all_claims = self._store.get_claims_for_entities(all_entity_ids) if all_entity_ids else {}
+
+        # Compute scores
         scores: dict[str, float] = {}
-        for eid in episodes:
-            # Get entities for this episode (via provenance)
-            entities = self._store.get_entities_for_episode(eid)
-            # Get claims for each entity
+        for eid in episode_ids:
+            entities = ep_entities.get(eid, [])
             all_confidences: list[float] = []
             for ent in entities:
                 if ent.get("deleted_at") is not None:
                     continue
                 all_confidences.append(float(ent.get("confidence", 0.0)))
-                claims = self._store.get_claims_for_entity(ent["id"])
-                for claim in claims:
+                for claim in all_claims.get(ent["id"], []):
                     if claim.get("deleted_at") is None:
                         all_confidences.append(float(claim.get("confidence", 0.0)))
-
-            if all_confidences:
-                scores[eid] = sum(all_confidences) / len(all_confidences)
-            else:
-                scores[eid] = 0.0
+            scores[eid] = sum(all_confidences) / len(all_confidences) if all_confidences else 0.0
         return scores
 
     # ------------------------------------------------------------------
