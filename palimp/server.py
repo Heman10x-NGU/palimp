@@ -34,6 +34,7 @@ from palimp.models import (
     MemoryCreate,
     MemoryResponse,
     RecallRequest,
+    RefineRequest,
     SessionClose,
     SessionCreate,
     SessionResponse,
@@ -347,7 +348,9 @@ def recall(body: RecallRequest) -> dict[str, Any]:
         ns=ns,
         query=body.query,
         mode=body.mode,
+        search_mode=body.search_mode,
         limit=body.limit,
+        max_tokens=body.max_tokens,
         include_provenance=body.include_provenance,
         explain=body.explain,
         as_of=body.as_of,
@@ -355,6 +358,42 @@ def recall(body: RecallRequest) -> dict[str, Any]:
     )
 
     # Collect top-level warnings from all results
+    all_warnings: list[str] = []
+    for r in output.results:
+        all_warnings.extend(r.warnings)
+
+    response: dict[str, Any] = {
+        "query": body.query,
+        "results": [r.model_dump() for r in output.results],
+        "warnings": all_warnings,
+    }
+
+    if body.explain:
+        response["explanation"] = output.explanation.model_dump()
+
+    return response
+
+
+@app.post("/v1/recall/refine")
+def recall_refine(body: RefineRequest) -> dict[str, Any]:
+    """Refine previous recall results with a new query."""
+    ns = validate_namespace(body.namespace)
+    engine: RecallEngine = app.state.recall_engine
+
+    output = engine.recall_refine(
+        ns=ns,
+        query=body.query,
+        previous_result_ids=body.previous_result_ids,
+        mode=body.mode,
+        search_mode=body.search_mode,
+        limit=body.limit,
+        max_tokens=body.max_tokens,
+        include_provenance=body.include_provenance,
+        explain=body.explain,
+        as_of=body.as_of,
+        temporal_mode=body.temporal_mode,
+    )
+
     all_warnings: list[str] = []
     for r in output.results:
         all_warnings.extend(r.warnings)

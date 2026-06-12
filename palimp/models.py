@@ -54,7 +54,9 @@ class RecallRequest(BaseModel):
     namespace: str
     query: str
     mode: Literal["fast", "hybrid", "thinking"] = "hybrid"
+    search_mode: Literal["lexical", "vector", "graph", "hybrid"] = "hybrid"
     limit: int = Field(default=8, ge=1, le=100)
+    max_tokens: Optional[int] = Field(default=None, ge=1)
     include_provenance: bool = True
     explain: bool = False
     as_of: Optional[str] = None  # ISO timestamp
@@ -184,6 +186,20 @@ class ScoreBreakdown(BaseModel):
     final: float = 0.0
 
 
+class RefineRequest(BaseModel):
+    namespace: str
+    query: str
+    previous_result_ids: list[str] = Field(min_length=1, max_length=500)
+    mode: Literal["fast", "hybrid", "thinking"] = "hybrid"
+    search_mode: Literal["lexical", "vector", "graph", "hybrid"] = "hybrid"
+    limit: int = Field(default=8, ge=1, le=100)
+    max_tokens: Optional[int] = Field(default=None, ge=1)
+    include_provenance: bool = True
+    explain: bool = False
+    as_of: Optional[str] = None
+    temporal_mode: Literal["auto", "current", "historical", "all"] = "auto"
+
+
 class RecallExplanation(BaseModel):
     query_expansions: list[str] = []
     query_terms: list[str] = []  # tokens extracted from the query
@@ -195,6 +211,7 @@ class RecallExplanation(BaseModel):
     graph_paths: list[dict[str, Any]] = []
     hop_count: int = 0
     path_score: float = 0.0
+    refined_from_count: int = 0
 
 
 class RecallResult(BaseModel):

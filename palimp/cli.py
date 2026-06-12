@@ -687,7 +687,13 @@ def recall(
     mode: str = typer.Option(
         "hybrid", "--mode", "-m", help="Recall mode: fast, hybrid, thinking."
     ),
+    search_mode: str = typer.Option(
+        "hybrid", "--search-mode", help="Search mode: lexical, vector, graph, hybrid."
+    ),
     limit: int = typer.Option(8, "--limit", "-l", help="Max results."),
+    max_tokens: Optional[int] = typer.Option(
+        None, "--max-tokens", help="Max total tokens (len/4) across results."
+    ),
     explain: bool = typer.Option(
         False, "--explain", "-e", help="Show score breakdown, why_retrieved, and provenance."
     ),
@@ -721,7 +727,9 @@ def recall(
         ns=ns,
         query=query,
         mode=mode,
+        search_mode=search_mode,
         limit=limit,
+        max_tokens=max_tokens,
         include_provenance=True,
         explain=explain,
         as_of=as_of,
@@ -767,6 +775,121 @@ def recall(
     # Explain mode: print explanation summary
     if explain:
         explanation = output.explanation
+        if explanation.query_terms:
+            typer.echo(f"Query terms: {', '.join(explanation.query_terms)}")
+        if explanation.latency_ms:
+            typer.echo(f"Latency (ms): {explanation.latency_ms}")
+
+
+# ---------------------------------------------------------------------------
+# recall-refine
+# ---------------------------------------------------------------------------
+
+
+@app.command("recall-refine")
+def recall_refine(
+    query: str = typer.Argument(help="Refinement query text."),
+    namespace: str = typer.Option(..., "--namespace", "-n", help="Namespace."),
+    previous_result_ids: str = typer.Option(
+        ..., "--ids", help="Comma-separated episode IDs from a prior recall."
+    ),
+    mode: str = typer.Option(
+        "hybrid", "--mode", "-m", help="Recall mode: fast, hybrid, thinking."
+    ),
+    search_mode: str = typer.Option(
+        "hybrid", "--search-mode", help="Search mode: lexical, vector, graph, hybrid."
+    ),
+    limit: int = typer.Option(8, "--limit", "-l", help="Max results."),
+    max_tokens: Optional[int] = typer.Option(
+        None, "--max-tokens", help="Max total tokens (len/4) across results."
+    ),
+    explain: bool = typer.Option(
+        False, "--explain", "-e", help="Show score breakdown and provenance."
+    ),
+    as_of: Optional[str] = typer.Option(
+        None, "--as-of", help="ISO timestamp for temporal reference time."
+    ),
+    temporal_mode: str = typer.Option(
+        "auto", "--temporal-mode", help="Temporal filtering: auto, current, historical, all."
+    ),
+    db: str = typer.Option(
+        "~/.palimp/palimp.db", help="Path to SQLite database."
+    ),
+) -> None:
+    """Refine previous recall results with a narrower query."""
+    try:
+        ns = validate_namespace(namespace)
+    except ValidationError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    ids_list = [i.strip() for i in previous_result_ids.split(",") if i.strip()]
+    if not ids_list:
+        typer.echo("Error: --ids must contain at least one episode ID.", err=True)
+        raise typer.Exit(code=1)
+
+    from palimp.embeddings import DeterministicEmbedder
+    from palimp.retriever import RecallEngine
+    from palimp.storage import SQLiteStore
+
+    resolved = os.path.expanduser(db)
+    store = SQLiteStore(resolved)
+    embedder = DeterministicEmbedder()
+    engine = RecallEngine(store=store, embedder=embedder)
+
+    output = engine.recall_refine(
+        ns=ns,
+        query=query,
+        previous_result_ids=ids_list,
+        mode=mode,
+        search_mode=search_mode,
+        limit=limit,
+        max_tokens=max_tokens,
+        include_provenance=True,
+        explain=explain,
+        as_of=as_of,
+        temporal_mode=temporal_mode,
+    )
+
+    if not output.results:
+        typer.echo("No results found.")
+        return
+
+    for i, r in enumerate(output.results, 1):
+        typer.echo(f"--- Result {i} ---")
+        typer.echo(f"  kind:        {r.kind}")
+        typer.echo(f"  score:       {r.score:.4f}")
+        typer.echo(f"  content:     {r.content}")
+        if r.provenance:
+            for p in r.provenance:
+                ep = p.get("episode_id", "?")
+                ref = p.get("source_ref", "")
+                prov_str = f"    episode: {ep}"
+                if ref:
+                    prov_str += f"  source: {ref}"
+                typer.echo(prov_str)
+        if r.warnings:
+            for w in r.warnings:
+                typer.echo(f"  WARNING:     {w}")
+        typer.echo(f"  safety:      {r.safety}")
+
+        if explain and r.score_breakdown:
+            typer.echo("  --- Score Breakdown ---")
+            typer.echo(f"    lexical:     {r.score_breakdown.lexical:.4f}")
+            typer.echo(f"    vector:      {r.score_breakdown.vector:.4f}")
+            typer.echo(f"    graph_boost: {r.score_breakdown.graph_boost:.4f}")
+            typer.echo(f"    recency:     {r.score_breakdown.recency:.4f}")
+            typer.echo(f"    confidence:  {r.score_breakdown.confidence:.4f}")
+            typer.echo(f"    final:       {r.score_breakdown.final:.4f}")
+        if explain and r.why_retrieved:
+            typer.echo(f"  why:         {r.why_retrieved}")
+
+        typer.echo("")
+
+    if explain:
+        explanation = output.explanation
+        if explanation.refined_from_count:
+            typer.echo(f"Refined from: {explanation.refined_from_count} previous result(s)")
         if explanation.query_terms:
             typer.echo(f"Query terms: {', '.join(explanation.query_terms)}")
         if explanation.latency_ms:

@@ -241,13 +241,18 @@ if FastMCP is not None:
         namespace: str,
         query: str,
         mode: str = "hybrid",
+        search_mode: str = "hybrid",
         limit: int = 8,
+        max_tokens: Optional[int] = None,
         include_provenance: bool = True,
     ) -> str:
         """Recall memories and knowledge matching a query.
 
         Returns JSON with data array. Each result includes kind, content, score,
         provenance, and safety (treat_as_instruction: false).
+
+        search_mode: which backends to use — "lexical", "vector", "graph", or "hybrid".
+        max_tokens: if set, truncate results to fit within this token budget (len/4).
         """
         try:
             ns = validate_namespace(namespace)
@@ -257,7 +262,9 @@ if FastMCP is not None:
         engine = _get_recall_engine()
         output = engine.recall(
             ns=ns, query=query, mode=mode,
-            limit=limit, include_provenance=include_provenance,
+            search_mode=search_mode,
+            limit=limit, max_tokens=max_tokens,
+            include_provenance=include_provenance,
         )
         data = [r.model_dump() for r in output.results]
         return json.dumps({"data": data})
@@ -338,3 +345,75 @@ if FastMCP is not None:
             store=store, ns=ns, task=task, budget_tokens=budget_tokens,
         )
         return json.dumps(pack)
+
+    @mcp.tool()
+    def palimp_search(
+        namespace: str,
+        query: str,
+        search_mode: str = "hybrid",
+        limit: int = 8,
+        max_tokens: Optional[int] = None,
+        include_provenance: bool = True,
+    ) -> str:
+        """Search for context using the specified retrieval mode.
+
+        Modes: lexical (FTS5), vector (embeddings), graph (relationships), hybrid (all).
+        Use max_tokens to control context size. Use palimp_search_refine to narrow results.
+        """
+        try:
+            ns = validate_namespace(namespace)
+        except ValidationError as exc:
+            return json.dumps({"error": str(exc)})
+
+        engine = _get_recall_engine()
+        output = engine.recall(
+            ns=ns,
+            query=query,
+            search_mode=search_mode,
+            limit=limit,
+            max_tokens=max_tokens,
+            include_provenance=include_provenance,
+        )
+        data = [r.model_dump() for r in output.results]
+        return json.dumps({
+            "data": data,
+            "mode": search_mode,
+            "count": len(data),
+        })
+
+    @mcp.tool()
+    def palimp_search_refine(
+        namespace: str,
+        query: str,
+        previous_result_ids: list[str],
+        search_mode: str = "hybrid",
+        limit: int = 8,
+        max_tokens: Optional[int] = None,
+        include_provenance: bool = True,
+    ) -> str:
+        """Refine previous search results with a narrower query.
+
+        Searches only within episodes from previous results.
+        Enables progressive narrowing for agentic search.
+        """
+        try:
+            ns = validate_namespace(namespace)
+        except ValidationError as exc:
+            return json.dumps({"error": str(exc)})
+
+        engine = _get_recall_engine()
+        output = engine.recall_refine(
+            ns=ns,
+            query=query,
+            previous_result_ids=previous_result_ids,
+            search_mode=search_mode,
+            limit=limit,
+            max_tokens=max_tokens,
+            include_provenance=include_provenance,
+        )
+        data = [r.model_dump() for r in output.results]
+        return json.dumps({
+            "data": data,
+            "mode": search_mode,
+            "count": len(data),
+        })

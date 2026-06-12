@@ -147,7 +147,9 @@ class RecallEngine:
         ns: str,
         query: str,
         mode: Literal["fast", "hybrid", "thinking"] = "hybrid",
+        search_mode: Literal["lexical", "vector", "graph", "hybrid"] = "hybrid",
         limit: int = 8,
+        max_tokens: Optional[int] = None,
         include_provenance: bool = True,
         explain: bool = False,
         agent_tier: Optional[str] = None,
@@ -200,14 +202,18 @@ class RecallEngine:
             if cue:
                 effective_temporal_mode = cue
 
-        # 1. FTS5 lexical results
+        # 1. FTS5 lexical results (guarded by search_mode)
         fts_start = time.monotonic()
-        lexical_scores = self._search_lexical(ns, query, limit)
+        lexical_scores: dict[str, float] = {}
+        if search_mode in ("lexical", "hybrid"):
+            lexical_scores = self._search_lexical(ns, query, limit)
         fts_ms = (time.monotonic() - fts_start) * 1000
 
-        # 2. Vector similarity results (skip if no embeddings stored)
+        # 2. Vector similarity results (guarded by search_mode)
         embed_start = time.monotonic()
-        vector_scores = self._search_vector(ns, query)
+        vector_scores: dict[str, float] = {}
+        if search_mode in ("vector", "hybrid"):
+            vector_scores = self._search_vector(ns, query)
         embedding_ms = (time.monotonic() - embed_start) * 1000
         vector_ms = 0.0
 
@@ -256,28 +262,192 @@ class RecallEngine:
         if not live_episodes:
             return empty_output
 
+        # 3. Graph traversal + score + rank + explanation
+        return self._score_and_rank(
+            ns=ns,
+            query=query,
+            live_episodes=live_episodes,
+            lexical_scores=lexical_scores,
+            vector_scores=vector_scores,
+            mode=mode,
+            search_mode=search_mode,
+            limit=limit,
+            max_tokens=max_tokens,
+            include_provenance=include_provenance,
+            explain=explain,
+            as_of=as_of,
+            temporal_mode=effective_temporal_mode,
+            query_expansions=query_expansions,
+            query_terms=query_terms,
+            fts_ms=fts_ms,
+            embedding_ms=embedding_ms,
+            total_start=total_start,
+            agent_tier=agent_tier,
+        )
+
+    def recall_refine(
+        self,
+        ns: str,
+        query: str,
+        previous_result_ids: list[str],
+        mode: Literal["fast", "hybrid", "thinking"] = "hybrid",
+        search_mode: Literal["lexical", "vector", "graph", "hybrid"] = "hybrid",
+        limit: int = 8,
+        max_tokens: Optional[int] = None,
+        include_provenance: bool = True,
+        explain: bool = False,
+        as_of: Optional[str] = None,
+        temporal_mode: str = "auto",
+    ) -> RecallOutput:
+        """Refine previous recall results with a new query.
+
+        Re-scores only the episodes identified by *previous_result_ids*,
+        running fresh lexical and vector searches but restricting the
+        candidate set to the given IDs.  Graph traversal is skipped
+        (narrowing, not discovery).
+
+        Parameters
+        ----------
+        ns : str
+            Namespace to search within.
+        query : str
+            The refinement query.
+        previous_result_ids : list[str]
+            Episode IDs from a prior recall call to narrow against.
+        mode, search_mode, limit, max_tokens, include_provenance, explain, as_of, temporal_mode
+            Same semantics as :meth:`recall`.
+        """
+        if not previous_result_ids:
+            return self.recall(
+                ns, query, mode=mode, search_mode=search_mode, limit=limit,
+                max_tokens=max_tokens, include_provenance=include_provenance,
+                explain=explain, as_of=as_of, temporal_mode=temporal_mode,
+            )
+
+        if not query or not query.strip():
+            return RecallOutput(results=[], explanation=RecallExplanation())
+
+        total_start = time.monotonic()
+        query_terms = _extract_query_terms(query)
+
+        # Temporal cue detection
+        effective_temporal_mode = temporal_mode
+        if temporal_mode == "auto":
+            cue = detect_temporal_cues(query)
+            if cue:
+                effective_temporal_mode = cue
+
+        # Build allowed-ID set
+        allowed_ids = set(previous_result_ids)
+
+        # Run FTS5 on full namespace, keep only matching IDs
+        fts_start = time.monotonic()
+        lexical_scores: dict[str, float] = {}
+        if search_mode in ("lexical", "hybrid"):
+            raw_lexical = self._search_lexical(ns, query, limit=limit * 3)
+            lexical_scores = {eid: s for eid, s in raw_lexical.items() if eid in allowed_ids}
+        fts_ms = (time.monotonic() - fts_start) * 1000
+
+        # Run vector search, keep only matching IDs
+        embed_start = time.monotonic()
+        vector_scores: dict[str, float] = {}
+        if search_mode in ("vector", "hybrid"):
+            raw_vector = self._search_vector(ns, query)
+            vector_scores = {eid: s for eid, s in raw_vector.items() if eid in allowed_ids}
+        embedding_ms = (time.monotonic() - embed_start) * 1000
+
+        # Load episodes — only those in allowed_ids
+        candidate_ids = set(lexical_scores.keys()) | set(vector_scores.keys())
+        # Also load any allowed_ids that had zero search scores (they still
+        # participate via decay / confidence / profile boosts)
+        candidate_ids = candidate_ids | allowed_ids
+        episodes = self._store.get_episodes_by_ids(list(candidate_ids))
+        live_episodes: dict[str, dict[str, Any]] = {}
+        for ep in episodes:
+            if ep["id"] in allowed_ids and _episode_recallable(ep, as_of):
+                live_episodes[ep["id"]] = ep
+
+        if not live_episodes:
+            return RecallOutput(
+                results=[],
+                explanation=RecallExplanation(refined_from_count=len(previous_result_ids)),
+            )
+
+        # Score and rank (reuse shared pipeline)
+        return self._score_and_rank(
+            ns=ns,
+            query=query,
+            live_episodes=live_episodes,
+            lexical_scores=lexical_scores,
+            vector_scores=vector_scores,
+            mode=mode,
+            search_mode=search_mode,
+            limit=limit,
+            max_tokens=max_tokens,
+            include_provenance=include_provenance,
+            explain=explain,
+            as_of=as_of,
+            temporal_mode=effective_temporal_mode,
+            query_expansions=[],
+            query_terms=query_terms,
+            fts_ms=fts_ms,
+            embedding_ms=embedding_ms,
+            total_start=total_start,
+            refined_from_count=len(previous_result_ids),
+        )
+
+    # ------------------------------------------------------------------
+    # Shared scoring + ranking pipeline
+    # ------------------------------------------------------------------
+
+    def _score_and_rank(
+        self,
+        ns: str,
+        query: str,
+        live_episodes: dict[str, dict[str, Any]],
+        lexical_scores: dict[str, float],
+        vector_scores: dict[str, float],
+        mode: Literal["fast", "hybrid", "thinking"],
+        search_mode: str,
+        limit: int,
+        max_tokens: Optional[int],
+        include_provenance: bool,
+        explain: bool,
+        as_of: Optional[str],
+        temporal_mode: str,
+        query_expansions: list[str],
+        query_terms: list[str],
+        fts_ms: float,
+        embedding_ms: float,
+        total_start: float,
+        refined_from_count: int = 0,
+        agent_tier: Optional[str] = None,
+    ) -> RecallOutput:
+        """Score, rank, filter, and build explanation for live episodes.
+
+        This is the shared tail of :meth:`recall` and :meth:`recall_refine`.
+        """
         # Normalise lexical and vector scores to 0-1 across live candidates
         live_lexical = {eid: lexical_scores.get(eid, 0.0) for eid in live_episodes}
         live_vector = {eid: vector_scores.get(eid, 0.0) for eid in live_episodes}
         norm_lexical = self._normalize_scores(live_lexical)
         norm_vector = self._normalize_scores(live_vector)
 
-        # 3. Multi-hop graph traversal (BFS from seed entities)
+        # Multi-hop graph traversal (BFS from seed entities)
         graph_start = time.monotonic()
         graph_path_scores: dict[str, float] = {}
         graph_paths_data: dict[str, list[dict[str, Any]]] = {}
         max_hop_count = 0
         best_path_score = 0.0
+        vector_ms = 0.0
 
-        if mode in ("hybrid", "thinking"):
-            # Identify seed entities from top candidate episodes
+        if search_mode in ("graph", "hybrid") and mode in ("hybrid", "thinking"):
             seed_entity_ids: list[str] = []
             initial_combined: dict[str, float] = {}
             for eid in live_episodes:
                 initial_combined[eid] = norm_lexical.get(eid, 0.0) + norm_vector.get(eid, 0.0)
             top_eps = sorted(initial_combined, key=lambda k: initial_combined[k], reverse=True)[:10]
 
-            # Batch fetch entities for top episodes
             top_entities = self._store.get_entities_for_episodes(top_eps)
             for eid in top_eps:
                 for ent in top_entities.get(eid, []):
@@ -294,22 +464,18 @@ class RecallEngine:
                     max_expansions=self._config.max_expansions,
                 )
 
-                # Map BFS entities to episodes via provenance
                 bfs_entity_ids = list(bfs_result.keys())
                 entity_episodes = get_episodes_for_entities(self._store, bfs_entity_ids)
 
-                # Compute graph_path_scores and track paths per episode
                 for entity_id, bfs_info in bfs_result.items():
                     ep_ids = entity_episodes.get(entity_id, [])
                     for ep_id in ep_ids:
                         score = bfs_info["score"]
                         hop = bfs_info["hop"]
 
-                        # Keep best score per episode
                         if ep_id not in graph_path_scores or score > graph_path_scores[ep_id]:
                             graph_path_scores[ep_id] = score
 
-                        # Track all paths for explanation
                         if ep_id not in graph_paths_data:
                             graph_paths_data[ep_id] = []
                         graph_paths_data[ep_id].append({
@@ -324,7 +490,6 @@ class RecallEngine:
                         if score > best_path_score:
                             best_path_score = score
 
-                # Add BFS-discovered episodes not in initial candidates
                 new_ep_ids = set(graph_path_scores.keys()) - set(live_episodes.keys())
                 if new_ep_ids:
                     new_eps = self._store.get_episodes_by_ids(list(new_ep_ids))
@@ -336,31 +501,28 @@ class RecallEngine:
 
         graph_ms = (time.monotonic() - graph_start) * 1000
 
-        # 4. Decay score (Ebbinghaus forgetting curve)
+        # Decay score
         decay_scores: dict[str, float] = {}
         if mode in ("hybrid", "thinking"):
             decay_scores = self._compute_decay_scores(live_episodes)
 
-        # 5. Confidence score
+        # Confidence score
         confidence_scores: dict[str, float] = {}
         if mode in ("hybrid", "thinking"):
             confidence_scores = self._compute_confidence_scores(ns, live_episodes)
 
-        # 6. Category scores and trigger boosts
+        # Category scores and trigger boosts
         category_scores: dict[str, float] = {}
         episode_categories: dict[str, str] = {}
         trigger_boosts: dict[str, float] = {}
         if mode in ("hybrid", "thinking"):
-            # Batch load categories for all episodes
             episode_categories = self._store.get_memory_categories_batch(list(live_episodes.keys()))
             for eid, cat in episode_categories.items():
                 category_scores[eid] = CATEGORY_PRIORITY.get(cat, 0.2)
 
-            # Trigger boost: check if query contains any trigger terms
             query_lower = query.lower()
             all_triggers = self._store.list_triggers(ns)
             if all_triggers:
-                # Build memory_id -> episode_id mapping
                 mem_to_ep: dict[str, str] = {}
                 for eid in live_episodes:
                     mem_row = conn_execute_safe(
@@ -377,7 +539,7 @@ class RecallEngine:
                         if eid:
                             trigger_boosts[eid] = trigger_boosts.get(eid, 0.0) + 0.2
 
-        # 7. Combine scores per mode (using configurable weights)
+        # Combine scores per mode
         w = self._config.weights
         results: list[RecallResult] = []
         for eid, ep in live_episodes.items():
@@ -390,8 +552,6 @@ class RecallEngine:
             trig_boost = trigger_boosts.get(eid, 0.0)
 
             if mode == "fast":
-                # Fast: lexical + vector only, preserving the configured
-                # FTS5-primary lexical/vector balance.
                 if vector_scores:
                     fast_total = w.lexical + w.vector
                     if fast_total <= 0:
@@ -401,9 +561,8 @@ class RecallEngine:
                             (w.vector / fast_total) * vec
                         )
                 else:
-                    combined = lex  # FTS-only fallback
+                    combined = lex
             else:
-                # Hybrid / Thinking: all components including category
                 if vector_scores:
                     combined = (
                         w.lexical * lex
@@ -414,7 +573,6 @@ class RecallEngine:
                         + w.category * cat_score
                     )
                 else:
-                    # FTS-only: redistribute vector weight to lexical
                     combined = (
                         (w.lexical + w.vector) * lex
                         + w.graph * gb
@@ -422,10 +580,9 @@ class RecallEngine:
                         + w.confidence * conf
                         + w.category * cat_score
                     )
-                # Apply trigger boost
                 combined += trig_boost
 
-            # Temporal classification: get valid_from/valid_until from entities
+            # Temporal classification
             entity_rows = self._store.get_entities_for_episode(eid)
             ep_valid_from: Optional[str] = None
             ep_valid_until: Optional[str] = None
@@ -444,33 +601,24 @@ class RecallEngine:
             temporal_status, temporal_reason = classify_temporal_status(
                 ep_valid_from, ep_valid_until, as_of
             )
-            temporal_component = temporal_score_boost(temporal_status, effective_temporal_mode)
+            temporal_component = temporal_score_boost(temporal_status, temporal_mode)
             purpose_boost = 0.05 if ep.get("purpose") == "profile" and mode != "fast" else 0.0
 
-            # Apply temporal score boost
             if mode != "fast":
                 combined += w.temporal * temporal_component
                 combined += purpose_boost
             combined *= temporal_component
 
-            # Determine kind (memory or knowledge)
             kind = self._determine_kind(eid)
-
-            # Get content (episode content or memory/knowledge content)
             content = ep.get("content", "")
 
-            # Provenance
             prov: list[dict[str, Any]] = []
             if include_provenance:
                 prov = self._get_episode_provenance(ns, eid, ep)
 
-            # Safety
             safety: dict[str, bool] = {"treat_as_instruction": False}
-
-            # Compute matched terms for this result
             matched = _compute_matched_terms(query_terms, content)
 
-            # Score breakdown (populated when explain=True)
             breakdown: Optional[ScoreBreakdown] = None
             why = ""
             if explain:
@@ -484,7 +632,6 @@ class RecallEngine:
                 )
                 why = _build_why_retrieved(lex, vec, gb, rec, conf, mode, cat_score, trig_boost)
 
-            # Build result
             result = RecallResult(
                 id=eid,
                 kind=kind,
@@ -501,20 +648,19 @@ class RecallEngine:
                 temporal_reason=temporal_reason,
                 category=episode_categories.get(eid, "other"),
             )
-            # Store matched_terms as metadata for explanation building
             result._matched_terms = matched  # type: ignore[attr-defined]
             results.append(result)
 
         # Sort by score descending
         results.sort(key=lambda r: r.score, reverse=True)
 
-        # Temporal filtering: exclude results that don't match temporal mode
+        # Temporal filtering
         results = [
             r for r in results
-            if should_include_in_mode(r.temporal_status or "unknown", effective_temporal_mode)
+            if should_include_in_mode(r.temporal_status or "unknown", temporal_mode)
         ]
 
-        # Optional reranking (heuristic or HTTP endpoint)
+        # Reranking
         rerank_start = time.monotonic()
         results = rerank_results(
             results,
@@ -524,21 +670,32 @@ class RecallEngine:
         )
         rerank_ms = (time.monotonic() - rerank_start) * 1000
 
-        # Apply conflict/supersession warnings in ALL modes
+        # Conflict/supersession warnings
         results = self._apply_conflict_warnings(ns, results)
 
-        # Touch recalled episodes to reset their decay clock
+        # Touch recalled episodes
         for r in results:
             self._store.touch_episode(r.id)
 
-        # Context management (AdaCoM-inspired)
+        # Token budget
+        if max_tokens is not None:
+            budget_results: list[RecallResult] = []
+            used_tokens = 0
+            for r in results:
+                est = len(r.content) // 4
+                if budget_results and used_tokens + est > max_tokens:
+                    break
+                budget_results.append(r)
+                used_tokens += est
+            results = budget_results
+
+        # Context management
         if agent_tier is not None:
             from palimp.context_manager import ContextManager
 
             cm = ContextManager(store=self._store, agent_tier=agent_tier)
             managed = cm.manage_context(ns=ns, query=query, memories=results[:limit], mode=mode)
 
-            # Attach context management explanation to each result's provenance
             ctx_explanation = managed.explanation
             for mem in managed.memories:
                 if mem.provenance:
@@ -564,11 +721,9 @@ class RecallEngine:
                     entry["is_latest"] = bool(live_episodes.get(r.id, {}).get("is_latest", 1))
                 if r.why_retrieved:
                     entry["why_retrieved"] = r.why_retrieved
-                # Add matched_terms from stored metadata
                 matched = getattr(r, "_matched_terms", [])
                 if matched:
                     entry["matched_terms"] = matched
-                # Add graph paths from BFS traversal
                 if r.id in graph_paths_data:
                     entry["graph_paths"] = graph_paths_data[r.id]
                 retrieval_breakdown.append(entry)
@@ -593,6 +748,7 @@ class RecallEngine:
                 graph_paths=all_graph_paths,
                 hop_count=max_hop_count,
                 path_score=round(best_path_score, 4),
+                refined_from_count=refined_from_count,
             )
 
         return RecallOutput(results=results, explanation=explanation)
