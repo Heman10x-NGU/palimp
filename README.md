@@ -31,6 +31,10 @@ Named after the [palimpsest](https://en.wikipedia.org/wiki/Palimpsest) — a man
 | ✅ Explainable retrieval | 7-signal score breakdown |
 | ✅ Ebbinghaus decay + pinning | Forgetting curve |
 | ✅ Batch ingestion (50 items/request) | REST + CLI |
+| ✅ Search mode selection | lexical/vector/graph/hybrid |
+| ✅ Token budget on recall | max_tokens parameter |
+| ✅ Iterative recall (progressive narrowing) | recall_refine |
+| ✅ MCP search tools | palimp_search + palimp_search_refine |
 
 ## Install
 
@@ -88,6 +92,15 @@ palimp knowledge add --namespace demo --title "Architecture" --content "Palimp u
 # Recall
 palimp recall --namespace demo "what does Alice prefer?"
 
+# Recall with search mode
+palimp recall --namespace demo "authentication" --search-mode lexical
+
+# Recall with token budget
+palimp recall --namespace demo "architecture" --max-tokens 200
+
+# Iterative recall (progressive narrowing)
+palimp recall refine --namespace demo --query "infrastructure" --from-ids "eps_abc,eps_def"
+
 # View stats
 palimp stats --namespace demo
 
@@ -140,6 +153,8 @@ Palimp exposes these MCP tools:
 - `palimp_memory_add` — add a memory to a namespace
 - `palimp_knowledge_add` — add a knowledge item to a namespace
 - `palimp_recall` — unified retrieval across memories and knowledge
+- `palimp_search` — search with mode selection and token budget
+- `palimp_search_refine` — iterative narrowing for agentic search
 - `palimp_context_get` — get entity context from the graph
 - `palimp_stats` — get namespace statistics
 - `palimp_context_pack` — pack runbook + recall context for a coding-agent task
@@ -196,7 +211,8 @@ See [docs/COMPARISON.md](docs/COMPARISON.md) for detailed differences.
 | GET | `/v1/stats?namespace=demo` | Namespace statistics |
 | POST | `/v1/memories` | Add a memory |
 | POST | `/v1/knowledge` | Add a knowledge item |
-| POST | `/v1/recall` | Unified retrieval |
+| POST | `/v1/recall` | Unified retrieval (supports search_mode, max_tokens) |
+| POST | `/v1/recall/refine` | Iterative recall narrowing |
 | GET | `/v1/context/{entity_id}` | Entity context from graph |
 | DELETE | `/v1/sources/{episode_id}` | Tombstone a source |
 
@@ -342,6 +358,83 @@ curl -X POST http://localhost:8420/v1/knowledge/batch \
 ```
 
 Both endpoints return a `BatchResponse` with created IDs and per-item status.
+
+## Search Mode Selection
+
+Control which retrieval backends contribute candidates:
+
+| Mode | Description | Speed | Use Case |
+|---|---|---|---|
+| `lexical` | FTS5 text search only | Fastest | Keyword matching, grep-like |
+| `vector` | Embedding similarity only | Fast | Semantic search |
+| `graph` | Graph traversal only | Medium | Relationship-based discovery |
+| `hybrid` | All combined (default) | Balanced | Best overall quality |
+
+```bash
+# Lexical only (fast, like grep)
+palimp recall --namespace demo "authentication" --search-mode lexical
+
+# Vector only (semantic)
+palimp recall --namespace demo "auth system" --search-mode vector
+
+# Graph only (relationship-based)
+palimp recall --namespace demo "Alice" --search-mode graph
+```
+
+In Python:
+
+```python
+results = engine.recall("demo", "authentication", search_mode="lexical", limit=5)
+```
+
+## Token Budget
+
+Limit the total token count of recall results using `max_tokens`:
+
+```bash
+# Limit to 200 tokens
+palimp recall --namespace demo "architecture" --max-tokens 200
+```
+
+```python
+results = engine.recall("demo", "architecture", max_tokens=200, limit=10)
+```
+
+Token estimation uses `len(content) // 4`. At least one result is always returned even if it exceeds the budget.
+
+## Iterative Recall (Progressive Narrowing)
+
+Narrow previous results with a more specific query — inspired by Turbopuffer's "agentic search" pattern:
+
+```python
+# First search: broad query
+output = engine.recall("startups", "AI agent", limit=10)
+result_ids = [r.id for r in output.results]
+
+# Refine: narrow to specific subset
+refined = engine.recall_refine("startups", "infrastructure", result_ids, limit=5)
+```
+
+```bash
+# CLI
+palimp recall refine --namespace demo --query "infrastructure" --from-ids "eps_abc,eps_def"
+```
+
+```python
+# MCP
+results = palimp_search_refine(
+    namespace="demo",
+    query="infrastructure",
+    previous_result_ids=["eps_abc", "eps_def"],
+)
+```
+
+Progressive narrowing workflow:
+1. `palimp_search("auth system")` → 20 results
+2. `palimp_search_refine("OAuth2 token", previous_ids)` → 5 results
+3. `palimp_search_refine("refresh token expiry", previous_ids)` → 2 results
+
+Each refinement re-scores from scratch (no score accumulation bias).
 
 ## Ebbinghaus Decay
 
